@@ -6,7 +6,7 @@ from .routers import auth, tb, projects, admin, zoho, teams, widgets
 from . import auth as auth_utils # To create initial admin
 import os
 
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine) # Moved to startup_event with retries
 
 app = FastAPI(title="Nibiaa Manager")
 
@@ -48,25 +48,49 @@ app.include_router(widgets.router, prefix="/api")
 
 @app.on_event("startup")
 def startup_event():
-    # Create initial admin user if not exists
-    from .database import SessionLocal
+    import time
+    from sqlalchemy.exc import OperationalError
+    from .database import SessionLocal, engine, Base
     from .models import User
+    
+    # 1. Initialize Database with Retries
+    max_retries = 10
+    retry_delay = 3
+    db_initialized = False
+    
+    print("Database initialization starting...")
+    for i in range(max_retries):
+        try:
+            Base.metadata.create_all(bind=engine)
+            db_initialized = True
+            print("Database initialized successfully.")
+            break
+        except OperationalError as e:
+            print(f"Database connection attempt {i+1} failed: {e}. Retrying in {retry_delay}s...")
+            time.sleep(retry_delay)
+    
+    if not db_initialized:
+        print("CRITICAL: Failed to initialize database after multiple retries. Exiting.")
+        return
+
+    # 2. Create initial admin user if not exists
     db = SessionLocal()
-    
-    # Ensure Admin exists
-    admin_email = os.getenv("ADMIN_EMAIL", "support@nibiaa.com")
-    owner_password = os.getenv("ADMIN_PASSWORD", "Nibiaa@12")
-    
-    user = db.query(User).filter(User.email == admin_email).first()
-    if not user:
-        hashed_password = auth_utils.get_password_hash(owner_password)
-        db_user = User(email=admin_email, hashed_password=hashed_password, role="owner")
-        db.add(db_user)
-        db.commit()
-    else:
-        pass
+    try:
+        # Ensure Admin exists
+        admin_email = os.getenv("ADMIN_EMAIL", "support@nibiaa.com")
+        owner_password = os.getenv("ADMIN_PASSWORD", "Nibiaa@12")
         
-    db.close()
+        user = db.query(User).filter(User.email == admin_email).first()
+        if not user:
+            hashed_password = auth_utils.get_password_hash(owner_password)
+            db_user = User(email=admin_email, hashed_password=hashed_password, role="owner")
+            db.add(db_user)
+            db.commit()
+            print(f"Initial admin user {admin_email} created.")
+        else:
+            pass
+    finally:
+        db.close()
 
 
 @app.get("/api/api_health")
