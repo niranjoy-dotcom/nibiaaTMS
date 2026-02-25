@@ -564,7 +564,8 @@ const TeamManagement = () => {
                                                                 </button>
                                                             </form>
                                                         </div>
-                                                    ))}
+                                                    );
+                                                })}
                                             </div>
                                         );
                                     })()
