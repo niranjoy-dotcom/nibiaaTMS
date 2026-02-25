@@ -13,9 +13,9 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   const tbToken = localStorage.getItem('tbToken');
-  
+
   console.log('[API Request]', config.url, 'Token:', token ? 'YES' : 'NO');
-  
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
   // Fetch user on mount if token exists
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
-    
+
     if (storedToken) {
       // Call /users/me with explicit token header
       api.get('/users/me', {
@@ -102,7 +102,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const res = await api.post('/tb/auth/token', { refresh_token: tbRefreshToken });
           const { token: newToken, refreshToken: newRefreshToken } = res.data;
-          
+
           setTbToken(newToken);
           setTbRefreshToken(newRefreshToken);
           localStorage.setItem('tbToken', newToken);
@@ -110,7 +110,7 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
           console.error("Failed to refresh TB token", error);
         }
-      }, 15 * 60 * 1000); 
+      }, 15 * 60 * 1000);
     }
 
     return () => {
@@ -122,11 +122,11 @@ export const AuthProvider = ({ children }) => {
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
-    
+
     try {
       const res = await api.post('/token', formData);
       const { access_token, tb_token, tb_refresh_token } = res.data;
-      
+
       // Store token in localStorage first
       localStorage.setItem('token', access_token);
       setToken(access_token);
@@ -141,10 +141,10 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Fetch user details with explicit header
-      const userRes = await api.get('/users/me', { 
-        headers: { 
+      const userRes = await api.get('/users/me', {
+        headers: {
           Authorization: `Bearer ${access_token}`,
-        } 
+        }
       });
       const userData = userRes.data;
       if (userData.role) {

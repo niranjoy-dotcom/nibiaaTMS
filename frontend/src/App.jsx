@@ -37,7 +37,7 @@ const AuthenticatedLayout = ({ children }) => (
 
 function App() {
   return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <Router>
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
@@ -47,6 +47,14 @@ function App() {
 
         {/* Private Routes with Layout */}
         <Route path="/" element={
+          <PrivateRoute>
+            <AuthenticatedLayout>
+              <Dashboard />
+            </AuthenticatedLayout>
+          </PrivateRoute>
+        } />
+
+        <Route path="/dashboard" element={
           <PrivateRoute>
             <AuthenticatedLayout>
               <Dashboard />
@@ -168,6 +176,8 @@ function App() {
           </PrivateRoute>
         } />
 
+        {/* Catch-all Redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
