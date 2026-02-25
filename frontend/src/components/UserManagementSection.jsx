@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trash2, UserPlus, Building, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, UserPlus, Building, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 
 const UserManagementSection = () => {
   const { api, user } = useAuth();
@@ -11,6 +11,8 @@ const UserManagementSection = () => {
   const [newUser, setNewUser] = useState({ email: '', roles: [], tenant_id: '' });
   const [error, setError] = useState('');
   const [assignTenantData, setAssignTenantData] = useState({ userId: null, tenantId: '' });
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingUserId, setEditingUserId] = useState(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -63,15 +65,46 @@ const UserManagementSection = () => {
     setError('');
     try {
       const payload = { ...newUser };
-      if (!payload.tenant_id) delete payload.tenant_id; // Remove if empty
+      if (!payload.tenant_id) delete payload.tenant_id;
 
-      await api.post('/users/', payload);
+      if (isEditMode && editingUserId) {
+        await api.put(`/users/${editingUserId}`, {
+          roles: payload.roles
+        });
+        setIsEditMode(false);
+        setEditingUserId(null);
+        alert("User updated successfully");
+      } else {
+        await api.post('/users/', payload);
+        alert("User created successfully");
+      }
+
       setNewUser({ email: '', roles: [], tenant_id: '' });
       fetchUsers();
     } catch (err) {
-      console.error("Failed to create user", err);
-      setError(err.response?.data?.detail || "Failed to create user");
+      console.error("Failed to save user", err);
+      setError(err.response?.data?.detail || "Failed to save user");
     }
+  };
+
+  const handleStartEdit = (u) => {
+    const roles = u.role ? u.role.split(',').map(r => r.trim()) : [];
+    setNewUser({
+      email: u.email,
+      roles: roles,
+      tenant_id: ''
+    });
+    setEditingUserId(u.id);
+    setIsEditMode(true);
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditingUserId(null);
+    setNewUser({ email: '', roles: [], tenant_id: '' });
+    setError('');
   };
 
   const handleAssignTenant = async () => {
@@ -106,8 +139,18 @@ const UserManagementSection = () => {
 
       {user.roles && user.roles.some(r => ['owner', 'co_owner', 'admin', 'co_admin', 'marketing', 'developer'].includes(r)) && (
         <div className="bg-white shadow rounded-lg border border-slate-200">
-          <div className="px-6 py-4 border-b border-slate-200">
-            <h5 className="text-lg font-medium text-slate-900">Create New User</h5>
+          <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+            <h5 className="text-lg font-medium text-slate-900">
+              {isEditMode ? 'Edit User' : 'Create New User'}
+            </h5>
+            {isEditMode && (
+              <button
+                onClick={handleCancelEdit}
+                className="text-sm text-slate-500 hover:text-slate-700 font-medium"
+              >
+                Cancel Edit
+              </button>
+            )}
           </div>
           <div className="p-6">
             {error && (
@@ -120,10 +163,11 @@ const UserManagementSection = () => {
                 <label className="block text-sm font-medium text-slate-900 mb-1">Email</label>
                 <input
                   type="email"
-                  className="appearance-none block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  className={`appearance-none block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm ${isEditMode ? 'bg-slate-50 cursor-not-allowed' : ''}`}
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   required
+                  disabled={isEditMode}
                   placeholder="user@example.com"
                 />
               </div>
@@ -179,8 +223,17 @@ const UserManagementSection = () => {
               </div>
               <div>
                 <button type="submit" className="w-full flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
-                  <UserPlus size={16} className="mr-2" />
-                  Create User
+                  {isEditMode ? (
+                    <>
+                      <Pencil size={16} className="mr-2" />
+                      Update User
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={16} className="mr-2" />
+                      Create User
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -220,10 +273,10 @@ const UserManagementSection = () => {
                       <div className="flex flex-wrap gap-2 items-center">
                         {u.role ? u.role.split(',').map(r => r.trim()).map(role => (
                           <span key={role} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${(role === 'admin' || role === 'owner') ? 'bg-purple-50 text-purple-700 ring-purple-700/10' :
-                              (role === 'co_admin' || role === 'co_owner') ? 'bg-indigo-50 text-indigo-700 ring-indigo-700/10' :
-                                role === 'project_manager' ? 'bg-blue-50 text-primary ring-blue-700/10' :
-                                  role === 'technical_manager' ? 'bg-green-50 text-green-700 ring-green-600/20' :
-                                    'bg-slate-50 text-slate-600 ring-slate-500/10'
+                            (role === 'co_admin' || role === 'co_owner') ? 'bg-indigo-50 text-indigo-700 ring-indigo-700/10' :
+                              role === 'project_manager' ? 'bg-blue-50 text-primary ring-blue-700/10' :
+                                role === 'technical_manager' ? 'bg-green-50 text-green-700 ring-green-600/20' :
+                                  'bg-slate-50 text-slate-600 ring-slate-500/10'
                             }`}>
                             {{
                               'owner': 'Owner',
@@ -242,12 +295,20 @@ const UserManagementSection = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end gap-3 items-center">
-                        {user && (user.role?.includes('owner') || user.roles?.includes('owner') || user.role?.includes('admin') || user.roles?.includes('admin')) && (
+                        {user && (user.roles?.some(r => ['owner', 'admin'].includes(r)) || user.role?.includes('owner') || user.role?.includes('admin')) && (
                           <button
-                            className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="text-blue-600 hover:text-blue-900 transition-colors"
+                            onClick={() => handleStartEdit(u)}
+                            title="Edit User"
+                          >
+                            <Pencil size={18} />
+                          </button>
+                        )}
+                        {user && (user.roles?.some(r => ['owner', 'admin'].includes(r)) || user.role?.includes('owner') || user.role?.includes('admin')) && (
+                          <button
+                            className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             onClick={() => handleDeleteUser(u.id)}
                             title="Delete User"
-                            disabled={false}
                           >
                             <Trash2 size={18} />
                           </button>

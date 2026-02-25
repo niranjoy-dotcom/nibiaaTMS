@@ -250,26 +250,35 @@ def update_user(
     user_id: int,
     user_update: schemas.UserUpdateAdmin,
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.require_role(["owner", "co_owner"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "admin", "co_admin"]))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Check Co-Admin Restrictions
-    if "owner" not in current_user.role:
+    # Check Role-based Restrictions
+    current_roles = current_user.roles
+    target_roles = user.roles
+    
+    # Check if current user has permission to edit target user
+    is_admin = "owner" in current_roles or "admin" in current_roles
+    is_co_admin = "co_owner" in current_roles or "co_admin" in current_roles
+    
+    target_is_admin = "owner" in target_roles or "admin" in target_roles
+    
+    if is_co_admin and not is_admin:
         # Co-Admin cannot edit Admin users
-        if "owner" in user.role:
+        if target_is_admin:
             raise HTTPException(status_code=403, detail="Co-Admins cannot edit Admin users")
         
-        # Co-Admin cannot promote to Admin
+        # Co-Admin cannot promote anyone to Admin
         new_roles_check = []
         if user_update.roles:
             new_roles_check = user_update.roles
         elif user_update.role:
             new_roles_check = [r.strip() for r in user_update.role.split(',')]
             
-        if "owner" in new_roles_check:
+        if "owner" in new_roles_check or "admin" in new_roles_check:
              raise HTTPException(status_code=403, detail="Co-Admins cannot promote users to Admin")
 
     # Handle roles update

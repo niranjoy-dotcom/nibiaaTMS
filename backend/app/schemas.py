@@ -77,7 +77,6 @@ class TenantCreate(BaseModel):
     project_manager_id: Optional[int] = None
     assigned_user_id: Optional[int] = None
     task_template_ids: Optional[List[int]] = []
-    task_template_ids: Optional[List[int]] = []
     zoho_tenant_id: Optional[int] = None
     project_lead_id: Optional[int] = None
     technology_lead_id: Optional[int] = None

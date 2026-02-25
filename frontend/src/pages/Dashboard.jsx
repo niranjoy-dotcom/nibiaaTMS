@@ -13,10 +13,10 @@ const WIDGET_CONFIG = {
     description: "Projects managed across all tenants.",
     to: '/projects',
     getProps: (stats) => ({
-      value: stats.projects.total,
+      value: stats?.projects?.total || 0,
       details: [
-        { label: 'Active', value: stats.projects.active, color: 'text-green-600' },
-        { label: 'Completed', value: stats.projects.completed, color: 'text-blue-600' }
+        { label: 'Active', value: stats?.projects?.active || 0, color: 'text-green-600' },
+        { label: 'Completed', value: stats?.projects?.completed || 0, color: 'text-blue-600' }
       ]
     })
   },
@@ -26,9 +26,9 @@ const WIDGET_CONFIG = {
     description: "Tenants with active projects.",
     to: '/tenants',
     getProps: (stats) => ({
-      value: stats.tenants.total,
+      value: stats?.tenants?.total || 0,
       details: [
-        { label: 'Total Tenants', value: stats.tenants.total }
+        { label: 'Total Tenants', value: stats?.tenants?.total || 0 }
       ]
     })
   },
@@ -38,9 +38,9 @@ const WIDGET_CONFIG = {
     description: "Total registered users in the system.",
     to: '/users',
     getProps: (stats) => ({
-      value: stats.users.total,
+      value: stats?.users?.total || 0,
       details: [
-        { label: 'Total Users', value: stats.users.total }
+        { label: 'Total Users', value: stats?.users?.total || 0 }
       ]
     })
   },
@@ -50,9 +50,9 @@ const WIDGET_CONFIG = {
     description: "Functional teams organized by department.",
     to: '/teams',
     getProps: (stats) => ({
-      value: stats.teams.total,
+      value: stats?.teams?.total || 0,
       details: [
-        { label: 'Total Teams', value: stats.teams.total }
+        { label: 'Total Teams', value: stats?.teams?.total || 0 }
       ]
     })
   },
@@ -62,13 +62,13 @@ const WIDGET_CONFIG = {
     description: "Subscription payment health check.",
     to: '/zoho-subscriptions',
     getProps: (stats) => {
-      if (!stats.payments) return { value: 'N/A' };
+      if (!stats?.payments) return { value: 'N/A' };
       return {
-        value: `${stats.payments.paid} Paid`,
+        value: `${stats.payments.paid || 0} Paid`,
         details: [
-          { label: 'Paid', value: stats.payments.paid, color: 'text-emerald-600' },
-          { label: 'Unpaid', value: stats.payments.unpaid, color: 'text-red-600' },
-          { label: 'Cancelled', value: stats.payments.cancelled, color: 'text-slate-500' }
+          { label: 'Paid', value: stats.payments.paid || 0, color: 'text-emerald-600' },
+          { label: 'Unpaid', value: stats.payments.unpaid || 0, color: 'text-red-600' },
+          { label: 'Cancelled', value: stats.payments.cancelled || 0, color: 'text-slate-500' }
         ]
       };
     }
@@ -79,15 +79,14 @@ const WIDGET_CONFIG = {
     description: "Customer onboarding and provisioning status.",
     to: '/zoho-subscriptions',
     getProps: (stats) => {
-      if (!stats.provisioning) return { value: 'N/A' };
+      if (!stats?.provisioning) return { value: 'N/A' };
       return {
-        value: `${stats.provisioning.provisioned}/${stats.provisioning.total}`,
+        value: `${stats.provisioning.provisioned || 0}/${stats.provisioning.total || 0}`,
         details: [
-          { label: 'Provisioned', value: stats.provisioning.provisioned, color: 'text-blue-600' },
-          { label: 'Pending', value: stats.provisioning.unprovisioned, color: 'text-amber-600' }
+          { label: 'Provisioned', value: stats.provisioning.provisioned || 0, color: 'text-blue-600' },
+          { label: 'Pending', value: stats.provisioning.unprovisioned || 0, color: 'text-amber-600' }
         ],
-        // Dynamic color override logic could be here if we really want it perfect
-        color: stats.provisioning.unprovisioned > 0 ? "bg-amber-500" : "bg-blue-500"
+        color: (stats.provisioning.unprovisioned || 0) > 0 ? "bg-amber-500" : "bg-blue-500"
       };
     }
   }
@@ -314,83 +313,83 @@ const Dashboard = () => {
               if (isPixelHeight) style.height = widget.height.toString().includes('px') ? widget.height : `${widget.height}px`;
 
               return (
-                <div 
-                    key={widget.id} 
-                    className={`${!isPixelWidth ? sizeClass : ''} bg-white overflow-hidden shadow rounded-lg relative custom-widget-wrapper`}
-                    style={style}
+                <div
+                  key={widget.id}
+                  className={`${!isPixelWidth ? sizeClass : ''} bg-white overflow-hidden shadow rounded-lg relative custom-widget-wrapper`}
+                  style={style}
                 >
                   <div className="px-4 py-5 sm:p-6 h-full flex flex-col">
                     <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center space-x-2">
-                            {CustomIcon && <CustomIcon className="h-5 w-5 text-gray-400" />}
-                            <h3 className="text-lg leading-6 font-medium text-gray-900 truncate">
-                                {widget.title}
-                            </h3>
-                        </div>
-                        <div className="flex space-x-2">
-                             <button onClick={() => { setEditingWidget(widget); setIsAddWidgetModalOpen(true); }} className="text-gray-400 hover:text-gray-500">
-                                <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button onClick={() => handleDeleteWidget(widget.id)} className="text-red-400 hover:text-red-500">
-                                <Trash2 className="h-4 w-4" />
-                            </button>
-                        </div>
+                      <div className="flex items-center space-x-2">
+                        {CustomIcon && <CustomIcon className="h-5 w-5 text-gray-400" />}
+                        <h3 className="text-lg leading-6 font-medium text-gray-900 truncate">
+                          {widget.title}
+                        </h3>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button onClick={() => { setEditingWidget(widget); setIsAddWidgetModalOpen(true); }} className="text-gray-400 hover:text-gray-500">
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => handleDeleteWidget(widget.id)} className="text-red-400 hover:text-red-500">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div 
-                        className="custom-widget-content flex-grow"
-                        dangerouslySetInnerHTML={{ __html: widget.custom_code || '' }}
+                    <div
+                      className="custom-widget-content flex-grow"
+                      dangerouslySetInnerHTML={{ __html: widget.custom_code || '' }}
                     />
                   </div>
                 </div>
-  );
-}
+              );
+            }
 
-if (!config) return null;
+            if (!config) return null;
 
-const props = config.getProps(dashboardStats || { projects: {}, tenants: {}, users: {}, teams: {} });
+            const props = config.getProps(dashboardStats || { projects: {}, tenants: {}, users: {}, teams: {} });
 
-return (
-  <div key={widget.id} className={`${sizeClass} relative`}>
-    <div className="h-full">
-      <StatsCard
-        title={widget.title}
-        value={props.value}
-        icon={CustomIcon || config.icon}
-        color={props.color || config.color}
-        description={config.description}
-        details={props.details}
-        to={config.to}
-        className="h-full"
-      />
-    </div>
-    <div className="absolute -top-2 -right-2 flex space-x-1">
-      <button
-        onClick={(e) => handleEditWidget(widget, e)}
-        className="p-1.5 bg-blue-100 rounded-full shadow-md text-blue-600 hover:bg-blue-200 transition-colors z-10"
-        title="Edit Widget"
-      >
-        <Edit2 className="h-3 w-3" />
-      </button>
-      <button
-        onClick={(e) => handleDeleteWidget(widget.id, e)}
-        className="p-1.5 bg-red-100 rounded-full shadow-md text-red-600 hover:bg-red-200 transition-colors z-10"
-        title="Remove Widget"
-      >
-        <Trash2 className="h-3 w-3" />
-      </button>
-    </div>
-  </div>
-);
+            return (
+              <div key={widget.id} className={`${sizeClass} relative`}>
+                <div className="h-full">
+                  <StatsCard
+                    title={widget.title}
+                    value={props.value}
+                    icon={CustomIcon || config.icon}
+                    color={props.color || config.color}
+                    description={config.description}
+                    details={props.details}
+                    to={config.to}
+                    className="h-full"
+                  />
+                </div>
+                <div className="absolute -top-2 -right-2 flex space-x-1">
+                  <button
+                    onClick={(e) => handleEditWidget(widget, e)}
+                    className="p-1.5 bg-blue-100 rounded-full shadow-md text-blue-600 hover:bg-blue-200 transition-colors z-10"
+                    title="Edit Widget"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteWidget(widget.id, e)}
+                    className="p-1.5 bg-red-100 rounded-full shadow-md text-red-600 hover:bg-red-200 transition-colors z-10"
+                    title="Remove Widget"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            );
           })}
         </div >
       )}
 
-<AddWidgetModal
-  isOpen={isAddWidgetModalOpen}
-  onClose={() => { setIsAddWidgetModalOpen(false); setEditingWidget(null); }}
-  onAdd={handleAddWidget}
-  initialData={editingWidget}
-/>
+      <AddWidgetModal
+        isOpen={isAddWidgetModalOpen}
+        onClose={() => { setIsAddWidgetModalOpen(false); setEditingWidget(null); }}
+        onAdd={handleAddWidget}
+        initialData={editingWidget}
+      />
     </div >
   );
 };
