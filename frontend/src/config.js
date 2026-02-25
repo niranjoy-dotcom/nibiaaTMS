@@ -1,7 +1,4 @@
 export const getApiUrl = () => {
-  if (window.location.hostname === 'tms.nibiaa.com') {
-    return 'https://apitms.nibiaa.com';
-  }
-  // Use relative path for Docker (HAProxy) and Local Dev (Vite Proxy)
+  // Use relative path for same-origin requests (e.g. tms.nibiaa.com/api)
   return '/api';
 };

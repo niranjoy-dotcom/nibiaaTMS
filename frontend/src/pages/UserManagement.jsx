@@ -132,7 +132,7 @@ const UserManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-900">User Management</h2>
-        {(user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin'))) && (
+        {(user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin') || user.roles.includes('owner') || user.roles.includes('co_owner'))) && (
           <button
             onClick={() => {
               if (isEditMode) {
@@ -149,7 +149,7 @@ const UserManagement = () => {
         )}
       </div>
 
-      {isCreateOpen && (user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin'))) && (
+      {isCreateOpen && (user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin') || user.roles.includes('owner') || user.roles.includes('co_owner'))) && (
         <div className="bg-white shadow rounded-lg border border-slate-200">
           <div className="px-4 py-5 sm:px-6 border-b border-slate-200 bg-white flex justify-between items-center">
             <h3 className="text-lg leading-6 font-medium text-slate-900">
@@ -200,8 +200,10 @@ const UserManagement = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-3">Roles</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
                   {[
-                    { value: 'admin', label: 'Owner' },
-                    { value: 'co_admin', label: 'Co-owner' },
+                    { value: 'admin', label: 'Owner (Legacy)' },
+                    { value: 'owner', label: 'Owner' },
+                    { value: 'co_admin', label: 'Co-owner (Legacy)' },
+                    { value: 'co_owner', label: 'Co-owner' },
                     { value: 'project_manager', label: 'Marketing' },
                     { value: 'technical_manager', label: 'Developer' }
                   ].map((roleOption) => (
@@ -265,8 +267,10 @@ const UserManagement = () => {
                       <div className="flex flex-wrap gap-1">
                         {u.role ? u.role.split(',').map((r, idx) => {
                           const roleLabel = {
-                            'admin': 'Owner',
-                            'co_admin': 'Co-owner',
+                            'admin': 'Owner (Legacy)',
+                            'owner': 'Owner',
+                            'co_admin': 'Co-owner (Legacy)',
+                            'co_owner': 'Co-owner',
                             'project_manager': 'Marketing',
                             'technical_manager': 'Developer'
                           }[r.trim()] || r.trim();
@@ -287,17 +291,17 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end gap-3 items-center">
-                        {(user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin'))) && (
+                        {(user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin') || user.roles.includes('owner') || user.roles.includes('co_owner'))) && (
                           <button
                             className="text-blue-600 hover:text-blue-900 transition-colors"
                             onClick={() => handleStartEdit(u)}
                             title="Edit User"
-                            disabled={user.roles.includes('admin') === false && u.role && u.role.includes('admin')}
+                            disabled={(user.roles.includes('admin') === false && user.roles.includes('owner') === false) && u.role && (u.role.includes('admin') || u.role.includes('owner'))}
                           >
                             <Pencil className="h-5 w-5" />
                           </button>
                         )}
-                        {(user.roles && user.roles.includes('admin')) && (
+                        {(user.roles && (user.roles.includes('admin') || user.roles.includes('owner'))) && (
                           <button
                             className="text-red-600 hover:text-red-900 transition-colors"
                             onClick={() => handleDeleteUser(u.id)}

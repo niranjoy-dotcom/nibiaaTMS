@@ -36,7 +36,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     if (!user) return null;
 
     const roles = user.roles || [];
-    const isAdmin = roles.includes('admin') || roles.includes('co_admin');
+    const isAdmin = roles.includes('admin') || roles.includes('co_admin') || roles.includes('owner') || roles.includes('co_owner');
     const isProjectManager = roles.includes('project_manager');
     const isTechnicalManager = roles.includes('technical_manager');
 

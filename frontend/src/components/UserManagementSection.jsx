@@ -104,7 +104,7 @@ const UserManagementSection = () => {
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-slate-800">Nibiaa Management Users</h2>
 
-      {user.roles && user.roles.some(r => ['owner', 'co_owner', 'marketing', 'developer'].includes(r)) && (
+      {user.roles && user.roles.some(r => ['owner', 'co_owner', 'admin', 'co_admin', 'marketing', 'developer'].includes(r)) && (
         <div className="bg-white shadow rounded-lg border border-slate-200">
           <div className="px-6 py-4 border-b border-slate-200">
             <h5 className="text-lg font-medium text-slate-900">Create New User</h5>
@@ -162,8 +162,10 @@ const UserManagementSection = () => {
                         />
                         <span className="ml-2 text-sm text-slate-700">
                           {{
-                            'admin': 'Owner',
-                            'co_admin': 'Co-owner',
+                            'owner': 'Owner',
+                            'co_owner': 'Co-owner',
+                            'admin': 'Owner (Legacy)',
+                            'co_admin': 'Co-owner (Legacy)',
                             'project_manager': 'Marketing',
                             'technical_manager': 'Developer',
                             'project_member': 'Project Member',
@@ -217,15 +219,17 @@ const UserManagementSection = () => {
                     <td className="px-6 py-4 text-sm text-slate-500">
                       <div className="flex flex-wrap gap-2 items-center">
                         {u.role ? u.role.split(',').map(r => r.trim()).map(role => (
-                          <span key={role} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${role === 'admin' ? 'bg-purple-50 text-purple-700 ring-purple-700/10' :
-                            role === 'co_admin' ? 'bg-indigo-50 text-indigo-700 ring-indigo-700/10' :
-                              role === 'project_manager' ? 'bg-blue-50 text-primary ring-blue-700/10' :
-                                role === 'technical_manager' ? 'bg-green-50 text-green-700 ring-green-600/20' :
-                                  'bg-slate-50 text-slate-600 ring-slate-500/10'
+                          <span key={role} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${(role === 'admin' || role === 'owner') ? 'bg-purple-50 text-purple-700 ring-purple-700/10' :
+                              (role === 'co_admin' || role === 'co_owner') ? 'bg-indigo-50 text-indigo-700 ring-indigo-700/10' :
+                                role === 'project_manager' ? 'bg-blue-50 text-primary ring-blue-700/10' :
+                                  role === 'technical_manager' ? 'bg-green-50 text-green-700 ring-green-600/20' :
+                                    'bg-slate-50 text-slate-600 ring-slate-500/10'
                             }`}>
                             {{
-                              'admin': 'Owner',
-                              'co_admin': 'Co-owner',
+                              'owner': 'Owner',
+                              'co_owner': 'Co-owner',
+                              'admin': 'Owner (Legacy)',
+                              'co_admin': 'Co-owner (Legacy)',
                               'project_manager': 'Marketing',
                               'technical_manager': 'Developer'
                             }[role] || role.replace('_', ' ')}
@@ -238,7 +242,7 @@ const UserManagementSection = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end gap-3 items-center">
-                        {user && (user.role?.includes('owner') || user.roles?.includes('owner')) && (
+                        {user && (user.role?.includes('owner') || user.roles?.includes('owner') || user.role?.includes('admin') || user.roles?.includes('admin')) && (
                           <button
                             className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => handleDeleteUser(u.id)}

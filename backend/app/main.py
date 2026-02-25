@@ -22,8 +22,7 @@ origins = [
     "http://localhost:5173", # Vite default
     "http://localhost:8090",
     "http://192.168.1.9:8090",
-    "https://tms.nibiaa.com",
-    "https://apitms.nibiaa.com",
+    "https://tms.nibiaa.com"
 ]
 
 # Allow any origin on port 5173 and 8090 (for local network access)

@@ -63,7 +63,7 @@ const TeamManagement = () => {
     const isTypeAllowed = (type) => {
         if (!type.roles) return true; // No restriction
         const roles = user?.roles || (user?.role ? user.role.split(',').map(r => r.trim()) : []);
-        if (roles.includes('admin')) return true; // Admin sees all
+        if (roles.includes('admin') || roles.includes('owner')) return true; // Admin sees all
         const allowedRoles = type.roles.split(',').map(r => r.trim());
         return roles.some(r => allowedRoles.includes(r));
     };
@@ -170,7 +170,9 @@ const TeamManagement = () => {
                     </h2>
                 </div>
                 {(user?.roles?.includes('admin') || user?.role?.includes('admin') ||
-                    user?.roles?.includes('co_admin') || user?.role?.includes('co_admin')) && (
+                    user?.roles?.includes('co_admin') || user?.role?.includes('co_admin') ||
+                    user?.roles?.includes('owner') || user?.role?.includes('owner') ||
+                    user?.roles?.includes('co_owner') || user?.role?.includes('co_owner')) && (
                         <button
                             onClick={() => setShowTypeManager(!showTypeManager)}
                             className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-md shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
@@ -189,7 +191,9 @@ const TeamManagement = () => {
 
             {/* Manager: Type Manager */}
             {showTypeManager && (user?.roles?.includes('admin') || user?.role?.includes('admin') ||
-                user?.roles?.includes('co_admin') || user?.role?.includes('co_admin')) && (
+                user?.roles?.includes('co_admin') || user?.role?.includes('co_admin') ||
+                user?.roles?.includes('owner') || user?.role?.includes('owner') ||
+                user?.roles?.includes('co_owner') || user?.role?.includes('co_owner')) && (
                     <div className="mb-6 bg-slate-50 border border-slate-200 rounded-lg p-4">
                         <h3 className="text-lg font-medium text-slate-900 mb-4">Manage Team Types</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -210,8 +214,10 @@ const TeamManagement = () => {
                                             const currentRoles = newType.roles ? newType.roles.split(',').map(r => r.trim()).filter(r => r) : [];
                                             const isSelected = currentRoles.includes(role);
                                             const displayLabel = {
-                                                'admin': 'Owner',
-                                                'co_admin': 'Co-owner',
+                                                'admin': 'Owner (Legacy)',
+                                                'owner': 'Owner',
+                                                'co_admin': 'Co-owner (Legacy)',
+                                                'co_owner': 'Co-owner',
                                                 'project_manager': 'Marketing',
                                                 'technical_manager': 'Developer'
                                             }[role] || role;
@@ -499,64 +505,66 @@ const TeamManagement = () => {
                                         return (
                                             <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
                                                 <h5 className="text-sm font-medium text-slate-700">Add Members</h5>
-                                                {allowedRoles.map(role => (
-                                                    <div key={role} className="flex items-center gap-2">
-                                                        <span className="text-xs font-medium text-slate-500 w-32 shrink-0">Add {formatRoleName(role)}:</span>
-                                                        <form
-                                                            onSubmit={(e) => {
-                                                                e.preventDefault();
-                                                                const userId = e.target.elements.user_id.value;
-                                                                if (!userId) return;
-                                                                // Use existing handleAddMember logic but manual call
-                                                                // We need to call api directly or adapt handleAddMember to accept args
-                                                                // Changing handleAddMember to accept args (it accepts e, teamId currently)
-                                                                // Let's update handleAddMember first or inline logic here.
-                                                                // Inline logic is safer to not break other things, or refactor handleAddMember.
-                                                                // Let's refactor handleAddMember to handleAddMember(teamId, userId, role)
+                                                {allowedRoles.map(role => {
+                                                    // Filter out redundant roles if both legacy and new exist? No, let's show both if configured.
+                                                    return (
+                                                        <div key={role} className="flex items-center gap-2">
+                                                            <span className="text-xs font-medium text-slate-500 w-32 shrink-0">Add {formatRoleName(role)}:</span>
+                                                            <form
+                                                                onSubmit={(e) => {
+                                                                    e.preventDefault();
+                                                                    const userId = e.target.elements.user_id.value;
+                                                                    if (!userId) return;
+                                                                    // Use existing handleAddMember logic but manual call
+                                                                    // We need to call api directly or adapt handleAddMember to accept args
+                                                                    // Changing handleAddMember to accept args (it accepts e, teamId currently)
+                                                                    // Let's update handleAddMember first or inline logic here.
+                                                                    // Inline logic is safer to not break other things, or refactor handleAddMember.
+                                                                    // Let's refactor handleAddMember to handleAddMember(teamId, userId, role)
 
-                                                                // Since I cannot change handleAddMember definition in THIS chunk easily (it's far away), 
-                                                                // I'll assume I update it or use a wrapper.
-                                                                // Actually I can just duplicate the logic briefly or use a hidden input and synthesize an event? No, avoiding hacky event synth.
-                                                                // I will refactor handleAddMember in a separate chunk or just use direct API call here.
-                                                                // Direct API call is cleanest for this specific map.
+                                                                    // Since I cannot change handleAddMember definition in THIS chunk easily (it's far away), 
+                                                                    // I'll assume I update it or use a wrapper.
+                                                                    // Actually I can just duplicate the logic briefly or use a hidden input and synthesize an event? No, avoiding hacky event synth.
+                                                                    // I will refactor handleAddMember in a separate chunk or just use direct API call here.
+                                                                    // Direct API call is cleanest for this specific map.
 
-                                                                // Wait, I can't access api/fetchTeams from here easily if it's not in scope... it IS in scope (closure).
-                                                                api.post(`/teams/${team.id}/members`, {
-                                                                    user_id: parseInt(userId),
-                                                                    role: role
-                                                                }).then(() => {
-                                                                    e.target.reset();
-                                                                    fetchTeams();
-                                                                }).catch(err => alert("Failed to add member"));
-                                                            }}
-                                                            className="flex flex-1 gap-2"
-                                                        >
-                                                            <select
-                                                                name="user_id"
-                                                                className="block w-full rounded-md border-slate-300 shadow-sm focus:border-primary focus:ring-primary h-9 text-xs"
-                                                                required
+                                                                    // Wait, I can't access api/fetchTeams from here easily if it's not in scope... it IS in scope (closure).
+                                                                    api.post(`/teams/${team.id}/members`, {
+                                                                        user_id: parseInt(userId),
+                                                                        role: role
+                                                                    }).then(() => {
+                                                                        e.target.reset();
+                                                                        fetchTeams();
+                                                                    }).catch(err => alert("Failed to add member"));
+                                                                }}
+                                                                className="flex flex-1 gap-2"
                                                             >
-                                                                <option value="">Select User...</option>
-                                                                {/* Filter users by this specific role */}
-                                                                {users.filter(u => {
-                                                                    if (role === 'Member' || role === 'Lead') return true; // Show all for generic roles? Or maybe strict?
-                                                                    // For system roles, strict filter.
-                                                                    if (!u.role) return false;
-                                                                    const uRoles = u.role.split(',').map(r => r.trim());
-                                                                    return uRoles.includes(role);
-                                                                }).map(u => (
-                                                                    <option key={u.id} value={u.id}>{u.email}</option>
-                                                                ))}
-                                                            </select>
-                                                            <button
-                                                                type="submit"
-                                                                className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none"
-                                                            >
-                                                                <UserPlus className="w-3 h-3" />
-                                                            </button>
-                                                        </form>
-                                                    </div>
-                                                ))}
+                                                                <select
+                                                                    name="user_id"
+                                                                    className="block w-full rounded-md border-slate-300 shadow-sm focus:border-primary focus:ring-primary h-9 text-xs"
+                                                                    required
+                                                                >
+                                                                    <option value="">Select User...</option>
+                                                                    {/* Filter users by this specific role */}
+                                                                    {users.filter(u => {
+                                                                        if (role === 'Member' || role === 'Lead') return true; // Show all for generic roles? Or maybe strict?
+                                                                        // For system roles, strict filter.
+                                                                        if (!u.role) return false;
+                                                                        const uRoles = u.role.split(',').map(r => r.trim());
+                                                                        return uRoles.includes(role);
+                                                                    }).map(u => (
+                                                                        <option key={u.id} value={u.id}>{u.email}</option>
+                                                                    ))}
+                                                                </select>
+                                                                <button
+                                                                    type="submit"
+                                                                    className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none"
+                                                                >
+                                                                    <UserPlus className="w-3 h-3" />
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    ))}
                                             </div>
                                         );
                                     })()
