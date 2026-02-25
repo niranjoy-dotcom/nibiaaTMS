@@ -179,7 +179,7 @@ const UserManagementSection = () => {
                     const roles = user.roles || (user.role ? [user.role] : []);
                     if (roles.includes('admin') || roles.includes('co_admin')) {
                       // Owner/Co-admin can assign anything (except Co-admin cannot assign Owner - handled in disabled/hidden logic below if needed)
-                      if (role === 'admin' && !roles.includes('admin')) return null;
+                      if (role === 'owner' && !roles.includes('owner') && !roles.includes('admin')) return null;
                     } else if (roles.includes('project_manager')) {
                       // Marketing can ONLY assign project_member
                       if (role !== 'project_member') return null;
@@ -208,8 +208,8 @@ const UserManagementSection = () => {
                           {{
                             'owner': 'Owner',
                             'co_owner': 'Co-owner',
-                            'admin': 'Owner (Legacy)',
-                            'co_admin': 'Co-owner (Legacy)',
+                            'admin': 'Owner',
+                            'co_admin': 'Co-owner',
                             'project_manager': 'Marketing',
                             'technical_manager': 'Developer',
                             'project_member': 'Project Member',
@@ -281,8 +281,8 @@ const UserManagementSection = () => {
                             {{
                               'owner': 'Owner',
                               'co_owner': 'Co-owner',
-                              'admin': 'Owner (Legacy)',
-                              'co_admin': 'Co-owner (Legacy)',
+                              'admin': 'Owner',
+                              'co_admin': 'Co-owner',
                               'project_manager': 'Marketing',
                               'technical_manager': 'Developer'
                             }[role] || role.replace('_', ' ')}

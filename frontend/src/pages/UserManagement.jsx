@@ -200,9 +200,7 @@ const UserManagement = () => {
                 <label className="block text-sm font-medium text-slate-700 mb-3">Roles</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
                   {[
-                    { value: 'admin', label: 'Owner (Legacy)' },
                     { value: 'owner', label: 'Owner' },
-                    { value: 'co_admin', label: 'Co-owner (Legacy)' },
                     { value: 'co_owner', label: 'Co-owner' },
                     { value: 'project_manager', label: 'Marketing' },
                     { value: 'technical_manager', label: 'Developer' }
@@ -267,9 +265,9 @@ const UserManagement = () => {
                       <div className="flex flex-wrap gap-1">
                         {u.role ? u.role.split(',').map((r, idx) => {
                           const roleLabel = {
-                            'admin': 'Owner (Legacy)',
+                            'admin': 'Owner',
                             'owner': 'Owner',
-                            'co_admin': 'Co-owner (Legacy)',
+                            'co_admin': 'Co-owner',
                             'co_owner': 'Co-owner',
                             'project_manager': 'Marketing',
                             'technical_manager': 'Developer'

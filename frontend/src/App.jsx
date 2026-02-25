@@ -63,7 +63,7 @@ function App() {
         } />
 
         <Route path="/tenants" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <Tenants />
             </AuthenticatedLayout>
@@ -71,7 +71,7 @@ function App() {
         } />
 
         <Route path="/create-tenant" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <CreateTenant />
             </AuthenticatedLayout>
@@ -89,7 +89,7 @@ function App() {
 
 
         <Route path="/statistics" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <StatisticsPage />
             </AuthenticatedLayout>
@@ -97,7 +97,7 @@ function App() {
         } />
 
         <Route path="/projects" element={
-          <PrivateRoute roles={['admin', 'co_admin', 'project_manager', 'technical_manager']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin', 'project_manager', 'technical_manager', 'marketing', 'developer']}>
             <AuthenticatedLayout>
               <ProjectManagement />
             </AuthenticatedLayout>
@@ -113,7 +113,7 @@ function App() {
         } />
 
         <Route path="/users" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <UserManagement />
             </AuthenticatedLayout>
@@ -121,7 +121,7 @@ function App() {
         } />
 
         <Route path="/teams" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <TeamManagement />
             </AuthenticatedLayout>
@@ -129,7 +129,7 @@ function App() {
         } />
 
         <Route path="/task-templates" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <TaskTemplates />
             </AuthenticatedLayout>
@@ -137,7 +137,7 @@ function App() {
         } />
 
         <Route path="/task-types" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <TaskTypes />
             </AuthenticatedLayout>
@@ -145,7 +145,7 @@ function App() {
         } />
 
         <Route path="/zoho-subscriptions" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <ZohoSubscriptions />
             </AuthenticatedLayout>
@@ -162,14 +162,14 @@ function App() {
 
         {/* Configuration Routes */}
         <Route path="/plan-mapping" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <PlanMappingSection />
             </AuthenticatedLayout>
           </PrivateRoute>
         } />
         <Route path="/usecase-mapping" element={
-          <PrivateRoute roles={['admin', 'co_admin']}>
+          <PrivateRoute roles={['owner', 'co_owner', 'admin', 'co_admin']}>
             <AuthenticatedLayout>
               <UsecaseMappingSection />
             </AuthenticatedLayout>

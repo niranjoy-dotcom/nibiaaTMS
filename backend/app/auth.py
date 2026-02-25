@@ -69,11 +69,12 @@ def require_role(roles: str | list[str]):
         allowed_roles = [roles] if isinstance(roles, str) else roles
         user_roles = current_user.roles
         
-        # Check if user has any of the allowed roles OR is an admin/co_admin/owner/co_owner
+        # Check if user has any of the allowed roles OR is a super admin
+        # Super admin roles: owner, co_owner, admin, co_admin
         has_allowed_role = any(role in allowed_roles for role in user_roles)
-        is_admin = any(role in ["admin", "co_admin", "owner", "co_owner"] for role in user_roles)
+        is_super_admin = any(role in ["admin", "co_admin", "owner", "co_owner"] for role in user_roles)
         
-        if not has_allowed_role and not is_admin:
+        if not has_allowed_role and not is_super_admin:
              raise HTTPException(status_code=403, detail="Operation not permitted")
         return current_user
     return role_checker

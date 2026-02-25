@@ -195,7 +195,7 @@ def get_project_assignment_stats(
         query = db.query(models.Project).filter(models.Project.technical_manager_id == tm.id)
         
         # Filter by Project Manager if current user is a PM
-        if current_user.role == "marketing":
+        if "marketing" in current_user.roles:
             query = query.filter(models.Project.project_manager_id == current_user.id)
 
         if days:
@@ -339,7 +339,7 @@ def read_templates(
     current_user: models.User = Depends(auth.get_current_active_user) # Allow PMs to read templates
 ):
     # PMs need to read templates to assign them
-    if current_user.role not in ["developer", "marketing", "owner"]:
+    if not any(role in current_user.roles for role in ["developer", "marketing", "owner", "co_owner"]):
         raise HTTPException(status_code=403, detail="Not authorized")
         
     templates = db.query(models.TaskTemplate).options(joinedload(models.TaskTemplate.task_type).joinedload(models.TaskType.team_type)).offset(skip).limit(limit).all()

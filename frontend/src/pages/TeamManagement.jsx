@@ -214,9 +214,9 @@ const TeamManagement = () => {
                                             const currentRoles = newType.roles ? newType.roles.split(',').map(r => r.trim()).filter(r => r) : [];
                                             const isSelected = currentRoles.includes(role);
                                             const displayLabel = {
-                                                'admin': 'Owner (Legacy)',
+                                                'admin': 'Owner',
                                                 'owner': 'Owner',
-                                                'co_admin': 'Co-owner (Legacy)',
+                                                'co_admin': 'Co-owner',
                                                 'co_owner': 'Co-owner',
                                                 'project_manager': 'Marketing',
                                                 'technical_manager': 'Developer'

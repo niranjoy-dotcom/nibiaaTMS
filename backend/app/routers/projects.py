@@ -20,7 +20,7 @@ def create_project(
     tm = db.query(models.User).filter(models.User.id == project.technical_manager_id).first()
     if not tm:
         raise HTTPException(status_code=404, detail="Technical Manager not found")
-    if tm.role != "developer" and tm.role != "owner": # Allow assigning to admin too? Maybe just TM.
+    if not any(r in tm.roles for r in ["developer", "owner", "co_owner", "admin", "co_admin"]):
         raise HTTPException(status_code=400, detail="Assigned user is not a Technical Manager")
 
     db_project = models.Project(**project.dict())
@@ -37,10 +37,10 @@ def read_projects(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     # Admin and Co-Admin see all projects
-    if "owner" in current_user.role or "co_owner" in current_user.role:
+    if any(r in current_user.roles for r in ["owner", "co_owner", "admin", "co_admin"]):
         projects = db.query(models.Project).offset(skip).limit(limit).all()
     # Technical Managers see only projects assigned to them
-    elif current_user.role == "developer":
+    elif "developer" in current_user.roles:
         projects = db.query(models.Project).filter(models.Project.technical_manager_id == current_user.id).offset(skip).limit(limit).all()
     else:
         # For standard users, find projects linked to their assigned tenants OR their teams
@@ -70,7 +70,7 @@ def read_project(
         raise HTTPException(status_code=404, detail="Project not found")
         
     # Permission Check & Task Filtering
-    if current_user.role not in ["owner", "marketing", "developer"]:
+    if not any(r in current_user.roles for r in ["owner", "co_owner", "admin", "co_admin", "marketing", "developer"]):
         # Check if user has access via Tenant or Team
         has_access = False
         is_team_member = False
@@ -170,7 +170,7 @@ def create_task_for_project(
 
     # Permission Check
     allowed = False
-    if current_user.role in ["owner", "marketing", "developer"]:
+    if any(r in current_user.roles for r in ["owner", "co_owner", "admin", "co_admin", "marketing", "developer"]):
         allowed = True
     elif db_project.team_id:
         # Check if Team Lead
@@ -204,7 +204,7 @@ def update_task(
         raise HTTPException(status_code=404, detail="Task not found")
     
     # Permission Check
-    is_admin_or_manager = current_user.role in ["owner", "marketing", "developer"]
+    is_admin_or_manager = any(r in current_user.roles for r in ["owner", "co_owner", "admin", "co_admin", "marketing", "developer"])
     is_team_lead = False
     is_assignee = (db_task.assigned_to_id == current_user.id)
     
@@ -310,7 +310,7 @@ def update_task(
             if project.project_manager and project.project_manager.email:
                 recipients.append(project.project_manager.email)
             
-            admins = db.query(models.User).filter(models.User.role == "owner").all()
+            admins = db.query(models.User).filter(models.User.role.like("%owner%")).all()
             for admin in admins:
                 if admin.email and admin.email not in recipients:
                     recipients.append(admin.email)
@@ -328,12 +328,11 @@ def update_task(
     db.refresh(db_task)
     return db_task
 
-@router.post("/{project_id}/apply-template/{template_id}", response_model=schemas.Task)
 def apply_task_template(
     project_id: int,
     template_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_role(["marketing", "developer", "owner"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "admin", "co_admin", "marketing", "developer"]))
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
