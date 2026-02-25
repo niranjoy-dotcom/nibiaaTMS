@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:15
+    container_name: nibiaa_tms_db
+    # Load credentials from .env
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - app_network
+
+  backend:
+    build: ./backend
+    container_name: nibiaa_tms_backend
+    env_file:
+      - .env
+    environment:
+      # Construct Docker-internal connection string using dynamic variables
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      - db
+    networks:
+      - app_network
+
+  frontend:
+    build: ./frontend
+    container_name: nibiaa_tms_frontend
+    networks:
+      - app_network
+
+  haproxy:
+    image: haproxy:alpine
+    container_name: nibiaa_tms_haproxy
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+
+
+networks:
+  app_network:
+    driver: bridge
