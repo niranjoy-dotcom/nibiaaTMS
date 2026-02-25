@@ -29,8 +29,8 @@
    The backend will run at `http://localhost:8000`.
    
    **Default Admin Credentials:**
-   - Email: `adminuser@nibiaa.com`
-   - Password: `admin12`
+   - Email: `support@nibiaa.com`
+   - Password: `Nibiaa@12`
 
 ## Frontend Setup
 

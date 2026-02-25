@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trash2, UserPlus, Building, AlertCircle } from 'lucide-react';
+import { Trash2, UserPlus, Building, AlertCircle, Pencil, X, Plus } from 'lucide-react';
 
 const UserManagement = () => {
   const { api, user } = useAuth();
@@ -8,14 +8,28 @@ const UserManagement = () => {
   const [tenants, setTenants] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [newUser, setNewUser] = useState({ email: '', role: 'user', tenant_id: '' });
+  const [newUser, setNewUser] = useState({ email: '', roles: ['developer'], tenant_id: '', is_active: true });
   const [error, setError] = useState('');
-  const [assignTenantData, setAssignTenantData] = useState({ userId: null, tenantId: '' });
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingUserId, setEditingUserId] = useState(null);
 
   useEffect(() => {
-    fetchUsers();
-    fetchTenants();
-    fetchProjects();
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchUsers(),
+          fetchTenants(),
+          fetchProjects()
+        ]);
+      } catch (error) {
+        console.error("Error loading data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
   const fetchProjects = async () => {
@@ -37,14 +51,11 @@ const UserManagement = () => {
   };
 
   const fetchUsers = async () => {
-    setLoading(true);
     try {
       const res = await api.get('/users/');
       setUsers(res.data || []);
     } catch (error) {
       console.error("Failed to fetch users", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -53,30 +64,57 @@ const UserManagement = () => {
     setError('');
     try {
       const payload = { ...newUser };
-      if (!payload.tenant_id) delete payload.tenant_id; // Remove if empty
-      
-      await api.post('/users/', payload);
-      setNewUser({ email: '', role: 'user', tenant_id: '' });
+      if (!payload.tenant_id) delete payload.tenant_id;
+
+      if (isEditMode && editingUserId) {
+        await api.put(`/users/${editingUserId}`, {
+          roles: payload.roles,
+          is_active: payload.is_active
+        });
+        setIsEditMode(false);
+        setEditingUserId(null);
+      } else {
+        await api.post('/users/', payload);
+      }
+
+      setNewUser({ email: '', roles: ['developer'], tenant_id: '', is_active: true });
       fetchUsers();
+      if (isEditMode) setIsCreateOpen(false);
     } catch (err) {
-      console.error("Failed to create user", err);
-      setError(err.response?.data?.detail || "Failed to create user");
+      console.error("Failed to process user", err);
+      setError(err.response?.data?.detail || "Failed to process user");
     }
   };
 
-  const handleAssignTenant = async () => {
-    if (!assignTenantData.userId || !assignTenantData.tenantId) return;
-    try {
-      await api.post('/users/assign-tenant', { 
-        user_id: assignTenantData.userId, 
-        tenant_id: assignTenantData.tenantId 
-      });
-      alert("Tenant assigned successfully");
-      setAssignTenantData({ userId: null, tenantId: '' });
-    } catch (err) {
-      console.error("Failed to assign tenant", err);
-      alert(err.response?.data?.detail || "Failed to assign tenant");
-    }
+  const handleStartEdit = (u) => {
+    const roles = u.role ? u.role.split(',').map(r => r.trim()) : [];
+    setNewUser({
+      email: u.email,
+      roles: roles.length > 0 ? roles : ['developer'],
+      tenant_id: '',
+      is_active: u.is_active
+    });
+    setEditingUserId(u.id);
+    setIsEditMode(true);
+    setIsCreateOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditingUserId(null);
+    setNewUser({ email: '', roles: ['developer'], tenant_id: '', is_active: true });
+    setIsCreateOpen(false);
+  };
+
+  const toggleRole = (roleValue) => {
+    setNewUser(prev => {
+      const isSelected = prev.roles.includes(roleValue);
+      const newRoles = isSelected
+        ? prev.roles.filter(r => r !== roleValue)
+        : [...prev.roles, roleValue];
+      return { ...prev, roles: newRoles };
+    });
   };
 
   const handleDeleteUser = async (userId) => {
@@ -92,12 +130,31 @@ const UserManagement = () => {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-slate-900">Nibiaa Management Users</h2>
-      
-      {user.role === 'admin' && (
-        <div className="bg-white shadow rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 py-5 sm:px-6 border-b border-slate-200 bg-white">
-            <h3 className="text-lg leading-6 font-medium text-slate-900">Create New User</h3>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-slate-900">User Management</h2>
+        {(user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin'))) && (
+          <button
+            onClick={() => {
+              if (isEditMode) {
+                handleCancelEdit();
+              } else {
+                setIsCreateOpen(!isCreateOpen);
+              }
+            }}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+          >
+            {isCreateOpen ? <X className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            {isCreateOpen ? 'Cancel' : 'Add New User'}
+          </button>
+        )}
+      </div>
+
+      {isCreateOpen && (user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin'))) && (
+        <div className="bg-white shadow rounded-lg border border-slate-200">
+          <div className="px-4 py-5 sm:px-6 border-b border-slate-200 bg-white flex justify-between items-center">
+            <h3 className="text-lg leading-6 font-medium text-slate-900">
+              {isEditMode ? 'Update User' : 'Create New User'}
+            </h3>
           </div>
           <div className="px-4 py-5 sm:p-6">
             {error && (
@@ -112,98 +169,67 @@ const UserManagement = () => {
                 </div>
               </div>
             )}
-            <form onSubmit={handleCreateUser} className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-12 items-end">
-              <div className="sm:col-span-4">
-                <label className="block text-sm font-medium text-slate-700">Email</label>
-                <input 
-                  type="email" 
-                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
-                  required 
-                  value={newUser.email}
-                  onChange={e => setNewUser({...newUser, email: e.target.value})}
-                />
+            <form onSubmit={handleCreateUser} className="space-y-6">
+              <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={newUser.email}
+                    disabled={isEditMode}
+                    onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                    className={`mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm py-2.5 px-3 ${isEditMode ? 'bg-slate-50 cursor-not-allowed opacity-75' : ''}`}
+                    placeholder="example@nibiaa.com"
+                  />
+                </div>
+                <div className="flex items-end pb-2">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newUser.is_active}
+                      onChange={(e) => setNewUser({ ...newUser, is_active: e.target.checked })}
+                      className="h-4 w-4 text-primary focus:ring-primary border-slate-300 rounded"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Account Active</span>
+                  </label>
+                </div>
               </div>
-              <div className="sm:col-span-3">
-                <label className="block text-sm font-medium text-slate-700">Role</label>
-                <select 
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                  value={newUser.role}
-                  onChange={e => setNewUser({...newUser, role: e.target.value})}
-                >
-                  <option value="admin">Admin</option>
-                  <option value="project_manager">Project Manager</option>
-                  <option value="technical_manager">Technical Manager</option>
-                </select>
-              </div>
-              <div className="sm:col-span-3">
-                <label className="block text-sm font-medium text-slate-700">Assign Tenant (Optional)</label>
-                <select 
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                  value={newUser.tenant_id}
-                  onChange={e => setNewUser({...newUser, tenant_id: e.target.value})}
-                >
-                  <option value="">None</option>
-                  {tenants.map(t => (
-                    <option key={t.id.id} value={t.id.id}>{t.title}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <button 
-                  type="submit" 
-                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Invite
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {['admin', 'project_manager', 'technical_manager'].includes(user.role) && (
-        <div className="bg-white shadow rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 py-5 sm:px-6 border-b border-slate-200 bg-white flex items-center">
-            <Building className="h-5 w-5 text-slate-400 mr-2" />
-            <h3 className="text-lg leading-6 font-medium text-slate-900">Assign Tenant to Existing User</h3>
-          </div>
-          <div className="px-4 py-5 sm:p-6">
-            <form onSubmit={handleAssignTenant} className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-12 items-end">
-              <div className="sm:col-span-5">
-                <label className="block text-sm font-medium text-slate-700">Select User</label>
-                <select 
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                  value={assignTenantData.userId}
-                  onChange={e => setAssignTenantData({...assignTenantData, userId: e.target.value})}
-                  required
-                >
-                  <option value="">Select User...</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.email} ({u.role})</option>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-3">Roles</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                  {[
+                    { value: 'admin', label: 'Owner' },
+                    { value: 'co_admin', label: 'Co-owner' },
+                    { value: 'project_manager', label: 'Marketing' },
+                    { value: 'technical_manager', label: 'Developer' }
+                  ].map((roleOption) => (
+                    <label
+                      key={roleOption.value}
+                      className="flex items-center space-x-3 cursor-pointer group"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={newUser.roles.includes(roleOption.value)}
+                        onChange={() => toggleRole(roleOption.value)}
+                        className="h-4 w-4 text-primary focus:ring-primary border-slate-300 rounded"
+                      />
+                      <span className={`text-sm ${newUser.roles.includes(roleOption.value) ? 'text-slate-900 font-medium' : 'text-slate-600 font-normal'} group-hover:text-slate-900`}>
+                        {roleOption.label}
+                      </span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
-              <div className="sm:col-span-5">
-                <label className="block text-sm font-medium text-slate-700">Select Tenant</label>
-                <select 
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                  value={assignTenantData.tenantId}
-                  onChange={e => setAssignTenantData({...assignTenantData, tenantId: e.target.value})}
-                  required
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                 >
-                  <option value="">Select Tenant...</option>
-                  {tenants.map(t => (
-                    <option key={t.id.id} value={t.id.id}>{t.title}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <button 
-                  type="submit" 
-                  className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-primary bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                >
-                  Assign
+                  {isEditMode ? <Pencil className="h-4 w-4 mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
+                  {isEditMode ? 'Save Changes' : 'Invite User'}
                 </button>
               </div>
             </form>
@@ -222,90 +248,68 @@ const UserManagement = () => {
               <thead className="bg-slate-50">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">ID</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Role</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assigned Tenant</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assigned Project</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">User</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Roles</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
-                {users.map(u => {
-                  // Find assigned tenant(s)
-                  // u.tenants is a list of {tenant_id: "..."}
-                  const assignedTenantIds = u.tenants ? u.tenants.map(t => t.tenant_id) : [];
-                  let assignedTenantsList = tenants.filter(t => assignedTenantIds.includes(t.id.id));
-                  
-                  // Find assigned project(s)
-                  // 1. Projects linked to assigned tenants (for standard users)
-                  let assignedProjectsList = projects.filter(p => assignedTenantIds.includes(p.tenant_id));
-
-                  // 2. Projects where user is Technical Manager (u.projects from backend)
-                  if (u.projects && u.projects.length > 0) {
-                      // Add these projects if not already in list
-                      u.projects.forEach(p => {
-                          if (!assignedProjectsList.find(ap => ap.id === p.id)) {
-                              assignedProjectsList.push(p);
-                          }
-                          // Also infer tenant from project if not already assigned
-                          if (!assignedTenantsList.find(t => t.id.id === p.tenant_id)) {
-                              const tenant = tenants.find(t => t.id.id === p.tenant_id);
-                              if (tenant) assignedTenantsList.push(tenant);
-                          }
-                      });
-                  }
-
-                  return (
-                    <tr key={u.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{u.id}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{u.email}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        {assignedTenantsList.length > 0 ? (
-                          assignedTenantsList.map(t => (
-                            <div key={t.id.id} className="text-xs">{t.title}</div>
-                          ))
-                        ) : (
-                          <span className="text-slate-400 italic">-</span>
+                {users.map(u => (
+                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{u.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-slate-900">{u.email}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {u.role ? u.role.split(',').map((r, idx) => {
+                          const roleLabel = {
+                            'admin': 'Owner',
+                            'co_admin': 'Co-owner',
+                            'project_manager': 'Marketing',
+                            'technical_manager': 'Developer'
+                          }[r.trim()] || r.trim();
+                          return (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {roleLabel}
+                            </span>
+                          );
+                        }) : (
+                          <span className="text-slate-400 italic text-xs">No Roles</span>
                         )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        {assignedProjectsList.length > 0 ? (
-                          assignedProjectsList.map(p => (
-                            <div key={p.id} className="text-xs">{p.name}</div>
-                          ))
-                        ) : (
-                          <span className="text-slate-400 italic">-</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {u.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end gap-3 items-center">
+                        {(user.roles && (user.roles.includes('admin') || user.roles.includes('co_admin'))) && (
+                          <button
+                            className="text-blue-600 hover:text-blue-900 transition-colors"
+                            onClick={() => handleStartEdit(u)}
+                            title="Edit User"
+                            disabled={user.roles.includes('admin') === false && u.role && u.role.includes('admin')}
+                          >
+                            <Pencil className="h-5 w-5" />
+                          </button>
                         )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}`}>
-                          {u.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {user.role === 'admin' && (
-                          <button 
-                            className="text-red-600 hover:text-red-900"
+                        {(user.roles && user.roles.includes('admin')) && (
+                          <button
+                            className="text-red-600 hover:text-red-900 transition-colors"
                             onClick={() => handleDeleteUser(u.id)}
+                            title="Delete User"
                           >
                             <Trash2 className="h-5 w-5" />
                           </button>
                         )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {users.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-4 text-center text-sm text-slate-500">No users found.</td>
+                      </div>
+                    </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>

@@ -40,7 +40,7 @@ def init_users():
             print("Warning: ADMIN_EMAIL or ADMIN_PASSWORD not set in .env. Admin user not created.")
         
         if choice == 'y':
-            create_user(db, "adminuser@nibiaa.com", "admin12", "admin")
+            create_user(db, "support@nibiaa.com", "Nibiaa@12", "admin")
             create_user(db, "technical@nibiaa.com", "technical12", "technical_manager")
             create_user(db, "maneger@nibiaa.com", "maneger12", "project_manager")
         else:

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { getApiUrl } from '../config';
+import { useAuth } from '../context/AuthContext';
 import { Mail, CheckCircle, AlertCircle } from 'lucide-react';
 
 const ForgotPassword = () => {
@@ -9,6 +8,7 @@ const ForgotPassword = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { api } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,7 +16,7 @@ const ForgotPassword = () => {
     setError('');
     setMessage('');
     try {
-      await axios.post(`${getApiUrl()}/auth/forgot-password`, { email });
+      await api.post('/auth/forgot-password', { email });
       setMessage('If the email exists, a reset link has been sent.');
     } catch (err) {
       setError('An error occurred. Please try again.');
@@ -36,7 +36,7 @@ const ForgotPassword = () => {
             Enter your email address and we'll send you a link to reset your password.
           </p>
         </div>
-        
+
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-slate-200">
           {message && (
             <div className="mb-4 rounded-md bg-green-50 p-4">
@@ -50,7 +50,7 @@ const ForgotPassword = () => {
               </div>
             </div>
           )}
-          
+
           {error && (
             <div className="mb-4 rounded-md bg-red-50 p-4">
               <div className="flex">
@@ -79,7 +79,7 @@ const ForgotPassword = () => {
                   type="email"
                   autoComplete="email"
                   required
-                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-slate-300 rounded-md"
+                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2.5"
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

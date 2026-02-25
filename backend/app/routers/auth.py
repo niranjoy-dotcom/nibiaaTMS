@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, BackgroundTasks, Body
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import List, Optional
 from .. import database, models, schemas, auth, thingsboard
+from .zoho import sync_zoho_data
 from ..email_utils import send_activation_email, send_reset_password_email
 import shutil
 import os
@@ -14,7 +16,11 @@ router = APIRouter(tags=["Authentication"])
 
 
 @router.post("/token", response_model=schemas.Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
+async def login_for_access_token(
+    background_tasks: BackgroundTasks,
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(database.get_db)
+):
     # 1. Try Local Login
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     local_valid = user and auth.verify_password(form_data.password, user.hashed_password)
@@ -40,6 +46,9 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
     access_token = auth.create_access_token(data={"sub": user.email, "role": user.role})
 
+    # Trigger Zoho Data Sync in Background
+    background_tasks.add_task(sync_zoho_data, db)
+
     return {
         "access_token": access_token, 
         "token_type": "bearer", 
@@ -55,7 +64,7 @@ async def create_user(
     user: schemas.UserCreate, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(database.get_db), 
-    current_user: models.User = Depends(auth.require_role(["admin", "co_admin", "project_manager", "technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "marketing", "developer"]))
 ):
     # Determine roles
     roles_to_assign = []
@@ -64,16 +73,25 @@ async def create_user(
     elif user.role:
         roles_to_assign = [r.strip() for r in user.role.split(',')]
     else:
-        roles_to_assign = ["user"]
+        roles_to_assign = ["developer"]
 
     # Role Restriction
-    if "co_admin" in current_user.roles and "admin" in roles_to_assign:
+    current_roles = current_user.roles
+
+    if "co_owner" in current_roles and "owner" in roles_to_assign:
         raise HTTPException(status_code=403, detail="Co-admin cannot create Admin users")
     
-    if not any(r in ["admin", "co_admin"] for r in current_user.roles):
-         # Example restriction: PMs can create TMs? Or just remove this check if logic is undefined.
-         # For now, let's assume only Admin/Co-admin can create non-standard roles
-         pass
+    # Project Manager Restrictions
+    if "marketing" in current_roles and not any(r in ["owner", "co_owner"] for r in current_roles):
+        for r in roles_to_assign:
+            if r != "project_member":
+                raise HTTPException(status_code=403, detail="Project Managers can only invite Project Members")
+
+    # Technical Manager Restrictions
+    if "developer" in current_roles and not any(r in ["owner", "co_owner", "marketing"] for r in current_roles):
+        for r in roles_to_assign:
+            if r != "technical_member":
+                raise HTTPException(status_code=403, detail="Technical Managers can only invite Technical Members")
 
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
@@ -110,7 +128,7 @@ async def create_user(
 def assign_tenant(
     assignment: schemas.UserTenantAssign,
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.require_role(["admin", "project_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "marketing"]))
 ):
     # Check if assignment already exists
     existing = db.query(models.UserTenant).filter(
@@ -232,12 +250,28 @@ def update_user(
     user_id: int,
     user_update: schemas.UserUpdateAdmin,
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.require_role(["admin", "co_admin"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner"]))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Check Co-Admin Restrictions
+    if "owner" not in current_user.role:
+        # Co-Admin cannot edit Admin users
+        if "owner" in user.role:
+            raise HTTPException(status_code=403, detail="Co-Admins cannot edit Admin users")
+        
+        # Co-Admin cannot promote to Admin
+        new_roles_check = []
+        if user_update.roles:
+            new_roles_check = user_update.roles
+        elif user_update.role:
+            new_roles_check = [r.strip() for r in user_update.role.split(',')]
+            
+        if "owner" in new_roles_check:
+             raise HTTPException(status_code=403, detail="Co-Admins cannot promote users to Admin")
+
     # Handle roles update
     new_roles = None
     if user_update.roles:
@@ -246,8 +280,6 @@ def update_user(
         new_roles = [r.strip() for r in user_update.role.split(',')]
         
     if new_roles:
-        if "co_admin" in current_user.roles and "admin" in new_roles:
-            raise HTTPException(status_code=403, detail="Co-admin cannot assign Admin role")
         user.role = ",".join(new_roles)
     
     if user_update.email:
@@ -272,7 +304,7 @@ def read_users(
     limit: int = 100, 
     role: Optional[str] = None,
     db: Session = Depends(database.get_db), 
-    current_user: models.User = Depends(auth.require_role(["admin", "co_admin", "project_manager", "technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "marketing", "developer"]))
 ):
     query = db.query(models.User)
     if role:
@@ -281,16 +313,92 @@ def read_users(
     return users
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.require_role(["admin", "co_admin"]))):
+def delete_user(user_id: int, db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.require_role(["owner"]))):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     
-    if "admin" in user.roles and "co_admin" in current_user.roles:
-        raise HTTPException(status_code=403, detail="Co-admin cannot delete Admin users")
-    
     db.delete(user)
     db.commit()
     return {"message": "User deleted successfully"}
+@router.get("/notifications/count")
+def get_notification_count(
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    # (Same logic as before, but I'll add the detail endpoint below)
+    return {"count": _get_notifications_internal(db, current_user, count_only=True)}
+
+@router.get("/notifications")
+def get_notifications(
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    return _get_notifications_internal(db, current_user, count_only=False)
+
+def _get_notifications_internal(db: Session, current_user: models.User, count_only: bool = False):
+    roles = current_user.roles
+    notifications = []
+    
+    if "owner" in roles or "co_owner" in roles:
+        # 1. Unpaid Zoho Subscriptions
+        unpaid_subs = db.query(models.ZohoTenant).filter(
+            models.ZohoTenant.status.in_(["unpaid", "past_due", "overdue"])
+        ).all()
+        for sub in unpaid_subs:
+            notifications.append({
+                "id": f"sub_{sub.id}",
+                "type": "payment",
+                "title": "Payment Issue",
+                "message": f"Tenant {sub.customer_name} has status: {sub.status}",
+                "link": "/zoho-subscriptions",
+                "severity": "high"
+            })
+            
+        # 2. Unprovisioned Tenants
+        unprovisioned = db.query(models.ZohoTenant).filter(
+            models.ZohoTenant.is_provisioned == False
+        ).all()
+        for tenant in unprovisioned:
+            notifications.append({
+                "id": f"prov_{tenant.id}",
+                "type": "provisioning",
+                "title": "Provisioning Pending",
+                "message": f"New tenant {tenant.customer_name} needs provisioning.",
+                "link": "/tenants",
+                "severity": "medium"
+            })
+    else:
+        # Manager/Member Level
+        project_ids = [r[0] for r in db.query(models.Project.id).filter(
+            or_(
+                models.Project.project_manager_id == current_user.id,
+                models.Project.technical_manager_id == current_user.id,
+                models.Project.project_lead_id == current_user.id,
+                models.Project.technology_lead_id == current_user.id
+            )
+        ).all()]
+        
+        pending_tasks = db.query(models.Task).filter(
+            models.Task.status == "Pending",
+            or_(
+                models.Task.project_id.in_(project_ids) if project_ids else False,
+                models.Task.assigned_to_id == current_user.id
+            )
+        ).all()
+        
+        for task in pending_tasks:
+            notifications.append({
+                "id": f"task_{task.id}",
+                "type": "task",
+                "title": "Pending Task",
+                "message": f"Task '{task.title}' is pending.",
+                "link": f"/projects/{task.project_id}",
+                "severity": task.criticality.lower() if task.criticality else "medium"
+            })
+            
+    if count_only:
+        return len(notifications)
+    return notifications

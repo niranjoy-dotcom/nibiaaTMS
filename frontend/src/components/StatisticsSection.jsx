@@ -34,7 +34,7 @@ const StatisticsSection = () => {
   return (
     <div className="w-full">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-slate-900 mb-4 sm:mb-0">Technical Manager Performance</h2>
+        <h2 className="text-xl font-semibold text-slate-900 mb-4 sm:mb-0">Developer Performance</h2>
         <div className="inline-flex rounded-md shadow-sm" role="group">
           <button 
             type="button" 
@@ -78,7 +78,7 @@ const StatisticsSection = () => {
           <table className="min-w-full divide-y divide-slate-300">
             <thead className="bg-slate-50">
               <tr>
-                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">Technical Manager</th>
+                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 sm:pl-6">Developer</th>
                 <th scope="col" className="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">Total Projects</th>
                 <th scope="col" className="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">Active</th>
                 <th scope="col" className="px-3 py-3.5 text-center text-sm font-semibold text-slate-900">Completed</th>
@@ -100,7 +100,7 @@ const StatisticsSection = () => {
                         </div>
                         <div className="ml-4">
                           <div className="font-medium text-slate-900">{tm.technical_manager}</div>
-                          <div className="text-slate-500">Technical Manager</div>
+                          <div className="text-slate-500">Developer</div>
                         </div>
                       </div>
                     </td>
@@ -138,7 +138,7 @@ const StatisticsSection = () => {
               {stats.length === 0 && (
                 <tr>
                   <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
-                    No Technical Managers found.
+                    No Developers found.
                   </td>
                 </tr>
               )}

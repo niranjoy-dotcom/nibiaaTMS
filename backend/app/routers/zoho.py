@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,9 +8,10 @@ import json
 import time
 from dotenv import load_dotenv
 from ..database import get_db
-from ..models import ZohoTenant, ZohoCustomer, Project, Usecase, PlanProfileMapping, ThingsboardProfile, User
+from ..models import ZohoTenant, ZohoCustomer, Project, Usecase, PlanProfileMapping, ThingsboardProfile, User, ZohoProduct, ZohoPlan
 from .. import schemas
 from .. import thingsboard
+from .. import email_utils
 
 # Load environment variables
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
@@ -205,6 +206,142 @@ async def zoho_callback(code: str = None, error: str = None):
         except httpx.RequestError as exc:
             return {"error": f"Connection error: {str(exc)}"}
 
+@router.get("/plans")
+async def get_zoho_plans(db: Session = Depends(get_db)):
+    """Fetch ACTIVE plans from Local DB"""
+    try:
+        plans = db.query(ZohoPlan).filter(ZohoPlan.status == "active").all()
+        return plans
+    except Exception as e:
+        print(f"Error in get_zoho_plans: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/products")
+async def get_zoho_products(db: Session = Depends(get_db)):
+    """Fetch ACTIVE products from Local DB"""
+    try:
+        products = db.query(ZohoProduct).filter(ZohoProduct.status == "active").all()
+        return products
+    except Exception as e:
+        print(f"Error in get_zoho_products: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/plans/sync")
+async def sync_zoho_plans_route(db: Session = Depends(get_db)):
+    return await sync_zoho_plans(db)
+
+async def sync_zoho_plans(db: Session):
+    try:
+        print("Syncing Zoho Plans...")
+        access_token = await get_zoho_access_token()
+        
+        zoho_dc = os.getenv("ZOHO_DC", "in")
+        api_domain = "zohoapis.in" if zoho_dc == "in" else "zohoapis.com"
+        org_id = os.getenv("ZOHO_BILLING_ORG_ID") or os.getenv("ZOHO_ORG_ID")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+             # Fetch Org ID if missing (Simplification: Assuming org_id is present or fetched previously)
+             if not org_id:
+                # Fetch logic repeated or refactored. For now assuming env is set or fetched elsewhere.
+                pass
+
+             url = f"https://www.{api_domain}/billing/v1/plans"
+             headers = {
+                "Authorization": f"Zoho-oauthtoken {access_token}",
+                "Content-Type": "application/json"
+             }
+             if org_id:
+                headers["X-com-zoho-subscriptions-organizationid"] = org_id
+            
+             response = await client.get(url, headers=headers)
+             if response.status_code == 200:
+                 plans = response.json().get("plans", [])
+                 for plan in plans:
+                     db_plan = db.query(ZohoPlan).filter(ZohoPlan.plan_code == plan.get("plan_code")).first()
+                     if not db_plan:
+                         db_plan = ZohoPlan(plan_code=plan.get("plan_code"))
+                         db.add(db_plan)
+                     
+                     db_plan.product_id = plan.get("product_id")
+                     db_plan.product_type = plan.get("product_type")
+                     db_plan.plan_name = plan.get("name")
+                     db_plan.plan_description = plan.get("description")
+                     db_plan.unit_price = plan.get("recurring_price", 0) # Mapping recurring_price to unit_price as base
+                     db_plan.recurring_price = plan.get("recurring_price", 0)
+                     db_plan.setup_fee = plan.get("setup_fee", 0)
+                     db_plan.interval = plan.get("interval")
+                     db_plan.interval_unit = plan.get("interval_unit")
+                     db_plan.billing_cycles = plan.get("billing_cycles")
+                     db_plan.trial_period = plan.get("trial_period")
+                     db_plan.status = plan.get("status")
+                     db_plan.created_time = plan.get("created_time")
+                     db_plan.updated_time = plan.get("updated_time")
+                 
+                 db.commit()
+                 print(f"Synced {len(plans)} plans.")
+                 return plans
+             else:
+                 print(f"Failed to fetch plans: {response.text}")
+                 return []
+    except Exception as e:
+        print(f"Error executing sync_zoho_plans: {e}")
+        return []
+
+@router.get("/products/sync")
+async def sync_zoho_products_route(db: Session = Depends(get_db)):
+    return await sync_zoho_products(db)
+
+async def sync_zoho_products(db: Session):
+    try:
+        print("Syncing Zoho Products...")
+        access_token = await get_zoho_access_token()
+        
+        zoho_dc = os.getenv("ZOHO_DC", "in")
+        api_domain = "zohoapis.in" if zoho_dc == "in" else "zohoapis.com"
+        org_id = os.getenv("ZOHO_BILLING_ORG_ID") or os.getenv("ZOHO_ORG_ID")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+             url = f"https://www.{api_domain}/billing/v1/products"
+             headers = {
+                "Authorization": f"Zoho-oauthtoken {access_token}",
+                "Content-Type": "application/json"
+             }
+             if org_id:
+                headers["X-com-zoho-subscriptions-organizationid"] = org_id
+            
+             response = await client.get(url, headers=headers)
+             if response.status_code == 200:
+                 products = response.json().get("products", [])
+                 for prod in products:
+                     db_prod = db.query(ZohoProduct).filter(ZohoProduct.product_id == prod.get("product_id")).first()
+                     if not db_prod:
+                         db_prod = ZohoProduct(product_id=prod.get("product_id"))
+                         db.add(db_prod)
+                     
+                     db_prod.product_name = prod.get("name")
+                     db_prod.product_code = prod.get("product_code") # Check if key exists
+                     db_prod.description = prod.get("description")
+                     db_prod.status = prod.get("status")
+                     db_prod.created_time = prod.get("created_time")
+                     db_prod.updated_time = prod.get("updated_time")
+                 
+                 db.commit()
+                 print(f"Synced {len(products)} products.")
+                 return products
+             else:
+                 print(f"Failed to fetch products: {response.text}")
+                 return []
+    except Exception as e:
+        print(f"Error executing sync_zoho_products: {e}")
+        return []
+
+async def sync_zoho_data(db: Session):
+    """Orchestrator function to sync all Zoho data"""
+    print("Starting background Zoho Sync...")
+    await sync_zoho_products(db)
+    await sync_zoho_plans(db)
+    print("Background Zoho Sync Completed.")
+
 @router.get("/subscriptions")
 async def get_zoho_subscriptions(db: Session = Depends(get_db)):
     # 1. Get Access Token
@@ -385,6 +522,7 @@ def get_stored_zoho_tenants(include_provisioned: bool = False, db: Session = Dep
 @router.post("/provision/{subscription_id}")
 def provision_zoho_tenant(
     subscription_id: str, 
+    background_tasks: BackgroundTasks,
     technical_manager_id: int = Body(None, embed=True),
     db: Session = Depends(get_db)
 ):
@@ -393,7 +531,8 @@ def provision_zoho_tenant(
     Determine Use Case by looking at Zoho Prefix in Plan Code.
     Determine Plan/Profile from Plan Profile Mapping.
     Create Thingsboard Tenant and Tenant Admin.
-    Create Project in local DB with Technical Manager assigned.
+    Create Project in local DB (Technical Manager is optional).
+    Send Email to Customer.
     """
     # 1. Fetch Zoho Tenant
     zoho_tenant = db.query(ZohoTenant).filter(ZohoTenant.subscription_id == subscription_id).first()
@@ -455,7 +594,26 @@ def provision_zoho_tenant(
     last_name = zoho_tenant.customer_name
     admin_email = zoho_tenant.email
     
-    admin_user = thingsboard.create_tenant_admin(tb_token, tenant_id, admin_email, first_name, last_name)
+    # Don't send activation mail automatically, we will send it manually
+    admin_user = thingsboard.create_tenant_admin(tb_token, tenant_id, admin_email, first_name, last_name, send_activation_mail=False)
+    
+    if not admin_user:
+        print(f"Warning: Failed to create Tenant Admin {admin_email}. Checking if user already exists in tenant...")
+        # Fallback: Check if user exists in the tenant
+        try:
+            tenant_users = thingsboard.get_tenant_users(tb_token, tenant_id)
+            for u in tenant_users:
+                if u.get('email') == admin_email:
+                    admin_user = u
+                    print(f"Found existing user: {admin_user['id']['id']}")
+                    break
+        except Exception as e:
+            print(f"Error searching for existing user: {e}")
+
+    activation_link = None
+    if admin_user:
+        admin_user_id = admin_user['id']['id']
+        activation_link = thingsboard.get_activation_link(tb_token, admin_user_id)
     
     # 6. Create Project in Local DB
     # Check if project already exists
@@ -479,8 +637,48 @@ def provision_zoho_tenant(
     zoho_tenant.is_provisioned = True
     db.commit()
 
+    # 8. Send Email to Technical Manager (Internal Process)
+    subject = f"Activation Details for New Tenant: {zoho_tenant.customer_name}"
+    host_ip = email_utils.get_host_ip()
+    dashboard_url = f"http://{host_ip}:8090"
+    
+    activation_msg = ""
+    if activation_link:
+        activation_msg = f'<li><b>Activation Link:</b> <a href="{activation_link}">Click here to set password</a></li>'
+    else:
+        activation_msg = '<li><b>Activation Link:</b> Not available. (User creation failed or link fetch error. Check server logs.)</li>'
+
+    body = f"""
+    <html>
+        <body>
+            <h2>New Tenant Provisioned</h2>
+            <p><b>Customer Name:</b> {zoho_tenant.customer_name}</p>
+            <p><b>Plan:</b> {zoho_tenant.plan_name}</p>
+            <p><b>Tenant Admin Email:</b> {admin_email}</p>
+            <br>
+            <p>Please use the following link to activate the Tenant Admin account and set the password:</p>
+            <ul>
+                <li><b>Dashboard URL:</b> <a href="{dashboard_url}">{dashboard_url}</a></li>
+                {activation_msg}
+            </ul>
+            <br>
+            <p>This is an internal notification. The customer has NOT been emailed.</p>
+        </body>
+    </html>
+    """
+    
+    recipients = []
+    # Only send to Technical Manager
+    if technical_manager_id:
+        tm = db.query(User).filter(User.id == technical_manager_id).first()
+        if tm and tm.email:
+            recipients.append(tm.email)
+            
+    if recipients:
+        background_tasks.add_task(email_utils.send_email, recipients, subject, body)
+
     return {
-        "message": "Tenant provisioned successfully",
+        "message": "Tenant provisioned successfully. Activation email sent to Technical Manager.",
         "tenant_id": tenant_id,
         "tenant_name": tenant_title,
         "profile_id": selected_profile_id,

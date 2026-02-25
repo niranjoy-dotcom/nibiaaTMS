@@ -2,5 +2,6 @@ export const getApiUrl = () => {
   if (window.location.hostname === 'tms.nibiaa.com') {
     return 'https://apitms.nibiaa.com';
   }
-  return `http://${window.location.hostname}:8080`;
+  // Use relative path for Docker (HAProxy) and Local Dev (Vite Proxy)
+  return '/api';
 };

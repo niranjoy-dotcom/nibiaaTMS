@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { getApiUrl } from '../config';
+import { useAuth } from '../context/AuthContext';
 import { Lock, CheckCircle, AlertCircle } from 'lucide-react';
 
 const ResetPassword = () => {
@@ -13,6 +12,7 @@ const ResetPassword = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { api } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,7 +24,7 @@ const ResetPassword = () => {
     setError('');
     setMessage('');
     try {
-      await axios.post(`${getApiUrl()}/auth/reset-password`, { token, new_password: newPassword });
+      await api.post('/auth/reset-password', { token, new_password: newPassword });
       setMessage('Password reset successfully. Redirecting to login...');
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
@@ -35,25 +35,25 @@ const ResetPassword = () => {
   };
 
   if (!token) {
-      return (
-        <div className="min-h-[80vh] flex items-center justify-center px-4 sm:px-6 lg:px-8">
-          <div className="max-w-md w-full space-y-8">
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Invalid Token</h3>
-                  <div className="mt-2 text-sm text-red-700">
-                    <p>Invalid or missing token.</p>
-                  </div>
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div className="rounded-md bg-red-50 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Invalid Token</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>Invalid or missing token.</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      );
+      </div>
+    );
   }
 
   return (
@@ -67,7 +67,7 @@ const ResetPassword = () => {
             Enter your new password below
           </p>
         </div>
-        
+
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-slate-200">
           {message && (
             <div className="mb-4 rounded-md bg-green-50 p-4">
@@ -81,7 +81,7 @@ const ResetPassword = () => {
               </div>
             </div>
           )}
-          
+
           {error && (
             <div className="mb-4 rounded-md bg-red-50 p-4">
               <div className="flex">
@@ -109,7 +109,7 @@ const ResetPassword = () => {
                   name="newPassword"
                   type="password"
                   required
-                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-slate-300 rounded-md"
+                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2.5"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
@@ -129,7 +129,7 @@ const ResetPassword = () => {
                   name="confirmPassword"
                   type="password"
                   required
-                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-slate-300 rounded-md"
+                  className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2.5"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />

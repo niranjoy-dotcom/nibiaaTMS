@@ -10,3 +10,4 @@ python-multipart
 python-dotenv
 fastapi-mail
 httpx
+psycopg2-binary

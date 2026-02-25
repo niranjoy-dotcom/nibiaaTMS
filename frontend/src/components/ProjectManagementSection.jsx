@@ -1,18 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Plus, X, Folder, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Folder, Calendar, ChevronLeft, ChevronRight, Edit2 } from 'lucide-react';
 
 const ProjectManagementSection = () => {
   const { api, user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [technicalManagers, setTechnicalManagers] = useState([]);
-  const [tenants, setTenants] = useState([]);
-  const [zohoTenants, setZohoTenants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newProject, setNewProject] = useState({ name: '', description: '', technical_manager_id: '', tenant_id: '', usecase: '', plan: '' });
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Edit Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    status: 'active',
+    technical_manager_id: '',
+    team_id: '',
+    project_lead_id: '',
+    technology_lead_id: ''
+  });
+
+  // ... existing code ...
+
+
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,12 +39,31 @@ const ProjectManagementSection = () => {
 
   useEffect(() => {
     fetchProjects();
-    if (user.role === 'project_manager' || user.role === 'admin') {
-      fetchTechnicalManagers();
-      fetchTenants();
-      fetchZohoTenants();
-    }
+    fetchTechnicalManagers();
+    fetchTeams();
+    fetchUsers();
   }, []);
+
+  const [teams, setTeams] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/users/');
+      setUsers(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch users", err);
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const res = await api.get('/teams');
+      setTeams(res.data);
+    } catch (err) {
+      console.error("Failed to fetch teams", err);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -46,76 +78,39 @@ const ProjectManagementSection = () => {
 
   const fetchTechnicalManagers = async () => {
     try {
-      const res = await api.get('/users/');
-      const tms = res.data.filter(u => u.role === 'technical_manager');
-      setTechnicalManagers(tms);
+      const res = await api.get('/admin/users?role=technical_manager');
+      setTechnicalManagers(res.data || []);
     } catch (err) {
-      console.error("Failed to fetch users", err);
+      console.error("Failed to fetch technical managers", err);
+      setTechnicalManagers([]);
     }
   };
 
-  const fetchTenants = async () => {
-    try {
-      const res = await api.get('/tb/tenants');
-      setTenants(res.data.data || []);
-    } catch (err) {
-      console.error("Failed to fetch tenants", err);
-    }
+  const handleEditClick = (project) => {
+    setEditingProject(project);
+    setEditForm({
+      name: project.name,
+      description: project.description || '',
+      status: project.status,
+      technical_manager_id: project.technical_manager_id || '',
+      team_id: project.team_id || '',
+      project_lead_id: project.project_lead_id || '',
+      technology_lead_id: project.technology_lead_id || ''
+    });
+    setShowEditModal(true);
   };
 
-  const fetchZohoTenants = async () => {
-    try {
-      const res = await api.get('/zoho/stored_tenants');
-      setZohoTenants(res.data || []);
-    } catch (err) {
-      console.error("Failed to fetch zoho tenants", err);
-    }
-  };
-
-  const handleZohoTenantChange = (e) => {
-    const selectedId = e.target.value;
-    if (!selectedId) return;
-
-    const selectedZohoTenant = zohoTenants.find(zt => zt.id === parseInt(selectedId));
-    if (selectedZohoTenant) {
-      // Map Plan Code to UseCase
-      let usecase = '';
-      if (selectedZohoTenant.plan_code && selectedZohoTenant.plan_code.includes('WMS')) {
-        usecase = 'Workforce Management';
-      } else if (selectedZohoTenant.plan_code && selectedZohoTenant.plan_code.includes('ETS')) {
-        usecase = 'Equipment Tracking Solutions';
-      } else {
-        usecase = selectedZohoTenant.plan_code;
-      }
-
-      // Map Plan Name
-      const plan = selectedZohoTenant.plan_name;
-
-      // Try to find matching Thingsboard Tenant
-      // Assuming customer_name matches tenant title
-      const matchingTenant = tenants.find(t => t.title === selectedZohoTenant.customer_name);
-      const tenantId = matchingTenant ? matchingTenant.id.id : '';
-
-      setNewProject({
-        ...newProject,
-        name: selectedZohoTenant.customer_name || '',
-        usecase: usecase,
-        plan: plan,
-        tenant_id: tenantId
-      });
-    }
-  };
-
-  const handleCreateProject = async (e) => {
+  const handleUpdateProject = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/projects/', newProject);
-      setMessage({ type: 'success', text: 'Project created successfully' });
-      setShowCreateModal(false);
-      setNewProject({ name: '', description: '', technical_manager_id: '', tenant_id: '' });
+      await api.put(`/projects/${editingProject.id}`, editForm);
+      setMessage({ type: 'success', text: 'Project updated successfully' });
+      setShowEditModal(false);
+      setEditingProject(null);
       fetchProjects();
     } catch (err) {
-      setMessage({ type: 'danger', text: 'Failed to create project' });
+      console.error("Failed to update project", err);
+      setMessage({ type: 'error', text: 'Failed to update project' });
     }
   };
 
@@ -129,15 +124,6 @@ const ProjectManagementSection = () => {
     <div className="w-full">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-slate-900">Project Management</h2>
-        {(user.role === 'project_manager' || user.role === 'admin') && (
-          <button 
-            className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            onClick={() => setShowCreateModal(true)}
-          >
-            <Plus className="-ml-0.5 mr-1.5 h-5 w-5" aria-hidden="true" />
-            Create New Project
-          </button>
-        )}
       </div>
 
       {message.text && (
@@ -161,13 +147,20 @@ const ProjectManagementSection = () => {
                 <p className="mb-2"><span className="font-medium text-slate-700">Status:</span> {project.status}</p>
                 <p className="line-clamp-3">{project.description}</p>
               </div>
-              <div className="mt-5">
-                <Link 
-                  to={`/projects/${project.id}`} 
+              <div className="mt-5 flex space-x-3">
+                <Link
+                  to={`/projects/${project.id}`}
                   className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-primary shadow-sm ring-1 ring-inset ring-primary/40 hover:bg-primary/5"
                 >
                   View Details
                 </Link>
+                <button
+                  onClick={() => handleEditClick(project)}
+                  className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                >
+                  <Edit2 className="h-4 w-4 mr-1.5" />
+                  Edit
+                </button>
               </div>
             </div>
             <div className="bg-slate-50 px-4 py-4 sm:px-6 border-t border-slate-200">
@@ -190,208 +183,223 @@ const ProjectManagementSection = () => {
       {/* Pagination */}
       {projects.length > 0 && (
         <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-slate-200 sm:px-6 mt-6 rounded-lg shadow border">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
-              >
-                Next
-              </button>
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-slate-700">
+                Showing <span className="font-medium">{startIndex + 1}</span> to <span className="font-medium">{Math.min(endIndex, projects.length)}</span> of{' '}
+                <span className="font-medium">{projects.length}</span> results
+              </p>
             </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-slate-700">
-                  Showing <span className="font-medium">{startIndex + 1}</span> to <span className="font-medium">{Math.min(endIndex, projects.length)}</span> of{' '}
-                  <span className="font-medium">{projects.length}</span> results
-                </p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-700">Rows per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="block w-full rounded-md border-0 py-1.5 pl-3 pr-8 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                </select>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-700">Rows per page:</span>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => {
-                      setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                    className="block w-full rounded-md border-0 py-1.5 pl-3 pr-8 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={30}>30</option>
-                  </select>
-                </div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                  <button
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <span className="sr-only">Previous</span>
-                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                  </button>
-                  {/* Page Numbers */}
-                  {[...Array(totalPages)].map((_, i) => {
-                    // Show limited page numbers if too many
-                    if (totalPages > 7) {
-                      if (i === 0 || i === totalPages - 1 || (i >= currentPage - 2 && i <= currentPage)) {
-                         // Show
-                      } else if (i === currentPage - 3 || i === currentPage + 1) {
-                         return <span key={i} className="relative inline-flex items-center px-4 py-2 border border-slate-300 bg-white text-sm font-medium text-slate-700">...</span>;
-                      } else {
-                        return null;
-                      }
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <span className="sr-only">Previous</span>
+                  <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                </button>
+                {/* Page Numbers */}
+                {[...Array(totalPages)].map((_, i) => {
+                  // Show limited page numbers if too many
+                  if (totalPages > 7) {
+                    if (i === 0 || i === totalPages - 1 || (i >= currentPage - 2 && i <= currentPage)) {
+                      // Show
+                    } else if (i === currentPage - 3 || i === currentPage + 1) {
+                      return <span key={i} className="relative inline-flex items-center px-4 py-2 border border-slate-300 bg-white text-sm font-medium text-slate-700">...</span>;
+                    } else {
+                      return null;
                     }
-                    
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentPage(i + 1)}
-                        aria-current={currentPage === i + 1 ? 'page' : undefined}
-                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                          currentPage === i + 1
-                            ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                            : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'
+                  }
+
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      aria-current={currentPage === i + 1 ? 'page' : undefined}
+                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === i + 1
+                        ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                        : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'
                         }`}
-                      >
-                        {i + 1}
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <span className="sr-only">Next</span>
-                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                  </button>
-                </nav>
-              </div>
+                    >
+                      {i + 1}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <span className="sr-only">Next</span>
+                  <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </nav>
             </div>
           </div>
+        </div>
       )}
 
-      {/* Create Project Modal */}
-      {showCreateModal && (
+      {/* Edit Project Modal */}
+      {showEditModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-slate-500/75 transition-opacity" aria-hidden="true" onClick={() => setShowCreateModal(false)}></div>
-
+            <div className="fixed inset-0 bg-slate-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setShowEditModal(false)}></div>
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="relative inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+              <div className="absolute top-0 right-0 pt-4 pr-4">
+                <button
+                  type="button"
+                  className="bg-white rounded-md text-slate-400 hover:text-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  onClick={() => setShowEditModal(false)}
+                >
+                  <span className="sr-only">Close</span>
+                  <X className="h-6 w-6" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="sm:flex sm:items-start">
+                <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                  <h3 className="text-lg leading-6 font-medium text-slate-900" id="modal-title">
+                    Edit Project
+                  </h3>
+                  <div className="mt-4">
+                    <form onSubmit={handleUpdateProject}>
+                      <div className="space-y-4">
+                        <div>
+                          <label htmlFor="name" className="block text-sm font-medium text-slate-700">Project Name</label>
+                          <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="mt-1 block w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="description" className="block text-sm font-medium text-slate-700">Description</label>
+                          <textarea
+                            name="description"
+                            id="description"
+                            rows={3}
+                            value={editForm.description}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            className="mt-1 block w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="developer" className="block text-sm font-medium text-slate-700">Developer</label>
+                          <select
+                            id="developer"
+                            name="technical_manager_id"
+                            value={editForm.technical_manager_id}
+                            onChange={(e) => setEditForm({ ...editForm, technical_manager_id: e.target.value })}
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                          >
+                            <option value="">Select Developer</option>
+                            {Array.isArray(technicalManagers) && technicalManagers.map(tm => (
+                              <option key={tm.id} value={tm.id}>{tm.email}</option>
+                            ))}
+                          </select>
+                        </div>
 
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                    <h3 className="text-lg leading-6 font-medium text-slate-900" id="modal-title">
-                      Create New Project
-                    </h3>
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Select Zoho Customer (Optional)</label>
-                        <select 
-                          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                          onChange={handleZohoTenantChange}
+                        <div>
+                          <label htmlFor="project_lead" className="block text-sm font-medium text-slate-700">Project Lead</label>
+                          <select
+                            id="project_lead"
+                            name="project_lead_id"
+                            value={editForm.project_lead_id}
+                            onChange={(e) => setEditForm({ ...editForm, project_lead_id: e.target.value })}
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                          >
+                            <option value="">Select Project Lead</option>
+                            {users.map(u => (
+                              <option key={u.id} value={u.id}>{u.email} ({u.role})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="technology_lead" className="block text-sm font-medium text-slate-700">Technology Lead</label>
+                          <select
+                            id="technology_lead"
+                            name="technology_lead_id"
+                            value={editForm.technology_lead_id}
+                            onChange={(e) => setEditForm({ ...editForm, technology_lead_id: e.target.value })}
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                          >
+                            <option value="">Select Technology Lead</option>
+                            {users.map(u => (
+                              <option key={u.id} value={u.id}>{u.email} ({u.role})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="status" className="block text-sm font-medium text-slate-700">Status</label>
+                          <select
+                            id="status"
+                            name="status"
+                            value={editForm.status}
+                            onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                          >
+                            <option value="active">Active</option>
+                            <option value="completed">Completed</option>
+                            <option value="archived">Archived</option>
+                            <option value="on_hold">On Hold</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                        <button
+                          type="submit"
+                          className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:col-start-2 sm:text-sm"
                         >
-                          <option value="">Select Zoho Customer</option>
-                          {zohoTenants.map(zt => (
-                            <option key={zt.id} value={zt.id}>{zt.customer_name} ({zt.plan_code})</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Project Name</label>
-                        <input 
-                          type="text" 
-                          className="mt-1 focus:ring-primary focus:border-primary block w-full shadow-sm sm:text-sm border-slate-300 rounded-md"
-                          value={newProject.name}
-                          onChange={e => setNewProject({...newProject, name: e.target.value})}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Use Case</label>
-                        <input 
-                          type="text" 
-                          className="mt-1 focus:ring-primary focus:border-primary block w-full shadow-sm sm:text-sm border-slate-300 rounded-md"
-                          value={newProject.usecase || ''}
-                          onChange={e => setNewProject({...newProject, usecase: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Plan</label>
-                        <input 
-                          type="text" 
-                          className="mt-1 focus:ring-primary focus:border-primary block w-full shadow-sm sm:text-sm border-slate-300 rounded-md"
-                          value={newProject.plan || ''}
-                          onChange={e => setNewProject({...newProject, plan: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Description</label>
-                        <textarea 
-                          className="mt-1 focus:ring-primary focus:border-primary block w-full shadow-sm sm:text-sm border-slate-300 rounded-md"
-                          rows="3"
-                          value={newProject.description}
-                          onChange={e => setNewProject({...newProject, description: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Assign to Tenant</label>
-                        <select 
-                          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                          value={newProject.tenant_id}
-                          onChange={e => setNewProject({...newProject, tenant_id: e.target.value})}
-                          required
+                          Save Changes
+                        </button>
+                        <button
+                          type="button"
+                          className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:col-start-1 sm:text-sm"
+                          onClick={() => setShowEditModal(false)}
                         >
-                          <option value="">Select Tenant</option>
-                          {tenants.map(t => (
-                            <option key={t.id.id} value={t.id.id}>{t.title}</option>
-                          ))}
-                        </select>
+                          Cancel
+                        </button>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700">Assign to Technical Manager</label>
-                        <select 
-                          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
-                          value={newProject.technical_manager_id}
-                          onChange={e => setNewProject({...newProject, technical_manager_id: e.target.value})}
-                          required
-                        >
-                          <option value="">Select Technical Manager</option>
-                          {technicalManagers.map(tm => (
-                            <option key={tm.id} value={tm.id}>{tm.email}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                    </form>
                   </div>
                 </div>
-              </div>
-              <div className="bg-slate-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button 
-                  type="button" 
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={handleCreateProject}
-                >
-                  Create Project
-                </button>
-                <button 
-                  type="button" 
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  Cancel
-                </button>
               </div>
             </div>
           </div>

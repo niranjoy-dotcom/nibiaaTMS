@@ -4,49 +4,93 @@ import { getApiUrl } from '../config';
 
 const AuthContext = createContext(null);
 
+// Create api instance ONCE at module level, shared across all components
+const api = axios.create({
+  baseURL: getApiUrl(),
+});
+
+// Add request interceptor to include token from localStorage
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  const tbToken = localStorage.getItem('tbToken');
+  
+  console.log('[API Request]', config.url, 'Token:', token ? 'YES' : 'NO');
+  
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (tbToken) {
+    config.headers['X-TB-Token'] = tbToken;
+  }
+  return config;
+});
+
+// Add response interceptor to handle 401s globally at module level
+api.interceptors.response.use(
+  (response) => {
+    console.log('[API Response] Success:', response.config.url, response.status);
+    return response;
+  },
+  (error) => {
+    console.error('[API Response] Error:', error.config?.url, error.response?.status, error.response?.data);
+    if (error.response?.status === 401) {
+      // Token is invalid, clear auth state
+      localStorage.removeItem('token');
+      localStorage.removeItem('tbToken');
+      localStorage.removeItem('tbRefreshToken');
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [tbToken, setTbToken] = useState(localStorage.getItem('tbToken'));
-  const [tbRefreshToken, setTbRefreshToken] = useState(localStorage.getItem('tbRefreshToken'));
+  const [token, setToken] = useState(() => {
+    return localStorage.getItem('token') || null;
+  });
+  const [tbToken, setTbToken] = useState(() => {
+    return localStorage.getItem('tbToken') || null;
+  });
+  const [tbRefreshToken, setTbRefreshToken] = useState(() => {
+    return localStorage.getItem('tbRefreshToken') || null;
+  });
   const [loading, setLoading] = useState(true);
 
-  const api = axios.create({
-    baseURL: getApiUrl(),
-  });
-
-  api.interceptors.request.use((config) => {
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    if (tbToken) {
-      config.headers['X-TB-Token'] = tbToken;
-    }
-    return config;
-  });
-
+  // Fetch user on mount if token exists
   useEffect(() => {
-    if (token) {
-      api.get(`/users/me?t=${new Date().getTime()}`)
+    const storedToken = localStorage.getItem('token');
+    
+    if (storedToken) {
+      // Call /users/me with explicit token header
+      api.get('/users/me', {
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+        }
+      })
         .then(res => {
           const userData = res.data;
+          // Parse roles from comma-separated string
           if (userData.role) {
             userData.roles = userData.role.split(',').map(r => r.trim());
           } else {
             userData.roles = [];
           }
           setUser(userData);
+          setToken(storedToken);
           setLoading(false);
         })
         .catch((err) => {
-          console.error("Failed to fetch user in effect", err);
-          logout();
+          console.error("Failed to fetch user on mount:", err.response?.status, err.response?.data);
+          // Clear invalid token
+          localStorage.removeItem('token');
+          setToken(null);
+          setUser(null);
           setLoading(false);
         });
     } else {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
   // Automatic Token Refresh Logic
   useEffect(() => {
@@ -83,8 +127,9 @@ export const AuthProvider = ({ children }) => {
       const res = await api.post('/token', formData);
       const { access_token, tb_token, tb_refresh_token } = res.data;
       
-      setToken(access_token);
+      // Store token in localStorage first
       localStorage.setItem('token', access_token);
+      setToken(access_token);
 
       if (tb_token) {
         setTbToken(tb_token);
@@ -95,12 +140,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('tbRefreshToken', tb_refresh_token);
       }
 
-      // Fetch user details immediately
-      const userRes = await api.get(`/users/me?t=${new Date().getTime()}`, { 
+      // Fetch user details with explicit header
+      const userRes = await api.get('/users/me', { 
         headers: { 
           Authorization: `Bearer ${access_token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
         } 
       });
       const userData = userRes.data;
@@ -149,27 +192,6 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('tbRefreshToken');
   };
 
-  // Add response interceptor to handle 401s globally
-  api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      if (error.response && error.response.status === 401) {
-        // If we get a 401, it means the token is invalid (expired or user deleted)
-        // We should logout the user to clear the invalid state
-        if (token) { // Only if we think we are logged in
-            setUser(null);
-            setToken(null);
-            setTbToken(null);
-            setTbRefreshToken(null);
-            localStorage.removeItem('token');
-            localStorage.removeItem('tbToken');
-            localStorage.removeItem('tbRefreshToken');
-        }
-      }
-      return Promise.reject(error);
-    }
-  );
-
   const updateProfile = async (data) => {
     try {
       const res = await api.put('/users/me', data);
@@ -181,12 +203,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Remove the response interceptor here - it's already at module level
+
+
 
   return (
-    <AuthContext.Provider value={{ user, setUser, token, tbToken, login, loginTB, logout, updateProfile, loading, api }}>
+    <AuthContext.Provider value={{ user, setUser, token, tbToken, login, loginTB, logout, updateProfile, loading, api, isAuthenticated: !!token }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};

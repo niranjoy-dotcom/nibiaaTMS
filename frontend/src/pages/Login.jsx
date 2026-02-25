@@ -24,7 +24,7 @@ const Login = () => {
       <div className="sm:mx-auto sm:w-full sm:max-w-sm">
         <img
           className="mx-auto h-12 w-auto"
-          src="https://static.wixstatic.com/media/1c6450_dce73556084e449a8bc191739a3f51d7~mv2.png/v1/fill/w_193,h_45,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/1c6450_dce73556084e449a8bc191739a3f51d7~mv2.png"
+          src="/logo.png"
           alt="Nibiaa"
         />
         <h2 className="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-slate-900">
@@ -44,7 +44,7 @@ const Login = () => {
                 </div>
               </div>
             )}
-            
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium leading-6 text-slate-900">
                 Email address
@@ -58,7 +58,7 @@ const Login = () => {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
+                  className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
                 />
               </div>
             </div>
@@ -83,7 +83,7 @@ const Login = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
+                  className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
                 />
               </div>
             </div>

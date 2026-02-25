@@ -2,13 +2,47 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { X, AlertCircle } from 'lucide-react';
 
-const CreateUsecaseModal = ({ show, onClose, onSuccess }) => {
+const CreateUsecaseModal = ({ show, onClose, onSuccess, initialData = null }) => {
   const { api } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [zohoPrefix, setZohoPrefix] = useState('');
+  const [availablePrefixes, setAvailablePrefixes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    const fetchPrefixes = async () => {
+        try {
+            const res = await api.get('/zoho/plans');
+            const prefixes = new Set();
+            if (Array.isArray(res.data)) {
+                res.data.forEach(plan => {
+                    if (plan.plan_code) {
+                        const prefix = plan.plan_code.split('-')[0].trim();
+                        if (prefix) prefixes.add(prefix);
+                    }
+                });
+            }
+            setAvailablePrefixes(Array.from(prefixes).sort());
+        } catch (err) {
+            console.error("Failed to fetch zoho plans for prefixes", err);
+        }
+    };
+    fetchPrefixes();
+  }, [api]);
+
+  React.useEffect(() => {
+    if (initialData) {
+      setName(initialData.name);
+      setDescription(initialData.description || '');
+      setZohoPrefix(initialData.zoho_prefix || '');
+    } else {
+      setName('');
+      setDescription('');
+      setZohoPrefix('');
+    }
+  }, [initialData, show]);
 
   if (!show) return null;
 
@@ -17,15 +51,19 @@ const CreateUsecaseModal = ({ show, onClose, onSuccess }) => {
     setLoading(true);
     setError('');
     try {
-      await api.post('/admin/usecases', { name, description, zoho_prefix: zohoPrefix });
+      if (initialData) {
+        await api.put(`/admin/usecases/${initialData.id}`, { name, description, zoho_prefix: zohoPrefix });
+      } else {
+        await api.post('/admin/usecases', { name, description, zoho_prefix: zohoPrefix });
+      }
       setName('');
       setDescription('');
       setZohoPrefix('');
       onSuccess();
       onClose();
     } catch (err) {
-      console.error("Failed to create usecase", err);
-      setError('Failed to create usecase. It might already exist.');
+      console.error("Failed to save usecase", err);
+      setError(initialData ? 'Failed to update usecase' : 'Failed to create usecase. It might already exist.');
     } finally {
       setLoading(false);
     }
@@ -42,7 +80,7 @@ const CreateUsecaseModal = ({ show, onClose, onSuccess }) => {
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <div className="flex justify-between items-start">
               <h3 className="text-lg leading-6 font-medium text-slate-900" id="modal-title">
-                Create New Usecase
+                {initialData ? 'Edit Usecase' : 'Create New Usecase'}
               </h3>
               <button 
                 onClick={onClose}
@@ -87,14 +125,18 @@ const CreateUsecaseModal = ({ show, onClose, onSuccess }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">Zoho Plan Code Prefix (e.g., WTS, ETS)</label>
-                  <input
-                    type="text"
+                  <label className="block text-sm font-medium text-slate-700">Zoho Plan Code Prefix</label>
+                  <select
                     className="mt-1 block w-full py-3 px-4 rounded-md border-slate-300 shadow-sm focus:border-primary focus:ring-primary text-base"
                     value={zohoPrefix}
                     onChange={(e) => setZohoPrefix(e.target.value)}
-                    placeholder="Optional"
-                  />
+                  >
+                    <option value="">Select Prefix (Optional)</option>
+                    {availablePrefixes.map(prefix => (
+                        <option key={prefix} value={prefix}>{prefix}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">Derived from available Zoho Plans (e.g., WTS, ETS)</p>
                 </div>
                 <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
                   <button
@@ -102,7 +144,7 @@ const CreateUsecaseModal = ({ show, onClose, onSuccess }) => {
                     disabled={loading}
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 text-base disabled:opacity-50"
                   >
-                    {loading ? 'Creating...' : 'Create'}
+                    {loading ? (initialData ? 'Updating...' : 'Creating...') : (initialData ? 'Update' : 'Create')}
                   </button>
                   <button
                     type="button"

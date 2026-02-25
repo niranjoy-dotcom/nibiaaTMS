@@ -18,14 +18,20 @@ def _get_tenant_users_aggregated(tenant_id: str, token: str):
     ta_token = None
     users = thingsboard.get_tenant_users(token, tenant_id)
     
-    # Find the first created Tenant Admin (Oldest First)
-    tenant_admins = [u for u in users if u['authority'] == 'TENANT_ADMIN']
-    tenant_admins.sort(key=lambda x: x.get('createdTime', float('inf')))
-    
-    ta = tenant_admins[0] if tenant_admins else None
-
-    if ta:
-        ta_token = thingsboard.get_user_token(token, ta['id']['id'])
+    # Check if caller is already a Tenant Admin for this tenant
+    caller = thingsboard.get_current_tb_user(token)
+    if caller and caller.get('authority') == 'TENANT_ADMIN' and caller.get('tenantId', {}).get('id') == tenant_id:
+        ta_token = token
+        # Identify 'ta' for return
+        ta = caller
+    else:
+        # Find the first created Tenant Admin (Oldest First)
+        tenant_admins = [u for u in users if u['authority'] == 'TENANT_ADMIN']
+        tenant_admins.sort(key=lambda x: x.get('createdTime', float('inf')))
+        
+        ta = tenant_admins[0] if tenant_admins else None
+        if ta:
+            ta_token = thingsboard.get_user_token(token, ta['id']['id'])
     
     if ta_token:
         all_users = thingsboard.get_all_user_infos(ta_token)
@@ -76,7 +82,7 @@ def logout_tb(token: str = Depends(get_tb_token)):
 def get_tenants(
     token: str = Depends(get_tb_token), 
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.require_role(["project_manager", "technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "marketing", "developer"]))
 ):
     all_tenants_tb = thingsboard.list_tenants(token)
     
@@ -120,43 +126,41 @@ def get_tenants(
     # Keep only tenants that exist in our local Project table
     system_tenants = [t for t in all_tenants_tb if t['id']['id'] in system_project_tenant_ids]
 
+    # If user is admin or co_admin, return all system tenants
+    if "owner" in current_user.role or "co_owner" in current_user.role:
+        return system_tenants
+        
     # Filter for Technical Manager
-    if current_user.role == "technical_manager":
+    if "developer" in current_user.role:
         # Get tenant_ids assigned to this TM
         tm_tenant_ids = [r[0] for r in db.query(models.Project.tenant_id).filter(models.Project.technical_manager_id == current_user.id).all()]
         system_tenants = [t for t in system_tenants if t['id']['id'] in tm_tenant_ids]
 
     # Filter for Project Manager
-    if current_user.role == "project_manager":
+    if "marketing" in current_user.role:
         # Get tenant_ids assigned to this PM (via UserTenant or Project)
-        # Using UserTenant as it seems to be the primary link for PMs in create_tenant
         pm_tenant_ids = [r[0] for r in db.query(models.UserTenant.tenant_id).filter(models.UserTenant.user_id == current_user.id).all()]
-        # Also check Project table just in case
         pm_project_tenant_ids = [r[0] for r in db.query(models.Project.tenant_id).filter(models.Project.project_manager_id == current_user.id).all()]
         
         allowed_ids = set(pm_tenant_ids + pm_project_tenant_ids)
         system_tenants = [t for t in system_tenants if t['id']['id'] in allowed_ids]
 
-    # If user is admin, project_manager, or technical_manager, return all system tenants
-    if current_user.role in ["admin", "project_manager", "technical_manager"]:
-        return system_tenants
-        
-    return []
+    return system_tenants
 
 @router.get("/profiles")
-def get_profiles(token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["project_manager", "technical_manager"]))):
+def get_profiles(token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "marketing", "developer"]))):
     return thingsboard.get_tenant_profiles(token)
 
 @router.post("/users")
 def create_tb_user(
     user: schemas.TBUserCreate, 
     token: str = Depends(get_tb_token), 
-    current_user: models.User = Depends(auth.require_role(["admin", "project_manager", "technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "marketing", "developer"]))
 ):
     # Permission Check based on Authority
     if user.authority == "TENANT_ADMIN":
         # Only Admin and Project Manager can create Tenant Admins
-        if current_user.role not in ["admin", "project_manager"]:
+        if current_user.role not in ["owner", "co_owner", "marketing"]:
              raise HTTPException(status_code=403, detail="Only Admins and Project Managers can invite Tenant Admins")
 
     new_user = thingsboard.create_user(
@@ -177,7 +181,7 @@ def create_tenant(
     tenant: schemas.TenantCreate, 
     token: str = Depends(get_tb_token), 
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.require_role(["admin", "project_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "marketing"]))
 ):
     # Create Tenant
     new_tenant = thingsboard.create_tenant(token, tenant.title, tenant.profile_id, tenant.use_case)
@@ -224,7 +228,11 @@ def create_tenant(
         project_manager_id=tenant.project_manager_id if tenant.project_manager_id else current_user.id,
         usecase=tenant.use_case,
         plan=profile_name,
-        customer_email=tenant.customer_email
+        customer_email=tenant.customer_email,
+        project_lead_id=tenant.project_lead_id,
+        technology_lead_id=tenant.technology_lead_id,
+        team_id=tenant.team_id,
+        technical_team_id=tenant.technical_team_id
     )
     db.add(db_project)
     db.commit()
@@ -281,7 +289,7 @@ def create_tenant(
     if not admin:
         return {"tenant": new_tenant, "project": db_project, "message": "Tenant and Project created but Admin creation failed"}
     
-    return {"tenant": new_tenant, "admin": admin, "project": db_project}
+    return {"tenant": new_tenant, "owner": admin, "project": db_project}
 
 @router.put("/tenant/{tenant_id}")
 def update_tenant(
@@ -289,7 +297,7 @@ def update_tenant(
     title: str = Body(..., embed=True), 
     profile_id: str = Body(..., embed=True), 
     token: str = Depends(get_tb_token), 
-    current_user: models.User = Depends(auth.require_role(["admin", "project_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "marketing"]))
 ):
     updated_tenant = thingsboard.update_tenant(token, tenant_id, title, profile_id)
     if not updated_tenant:
@@ -301,7 +309,7 @@ def get_tenant_users(
     tenant_id: str, 
     token: str = Depends(get_tb_token), 
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.require_role(["project_manager", "technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["marketing", "developer"]))
 ):
     users, _ = _get_tenant_users_aggregated(tenant_id, token)
     return users
@@ -325,13 +333,13 @@ def _bulk_user_action_task(tenant_id: str, token: str, active: bool, ignore_doma
         count += 1
 
 @router.post("/tenant/{tenant_id}/deactivate-safe")
-def deactivate_safe(tenant_id: str, background_tasks: BackgroundTasks, token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["admin", "project_manager", "technical_manager"]))):
+def deactivate_safe(tenant_id: str, background_tasks: BackgroundTasks, token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["owner", "marketing", "developer"]))):
     ignore_domain = False
     background_tasks.add_task(_bulk_user_action_task, tenant_id, token, False, ignore_domain)
     return {"message": "Safe deactivation started in background"}
 
 @router.post("/tenant/{tenant_id}/activate-safe")
-def activate_safe(tenant_id: str, background_tasks: BackgroundTasks, token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["admin", "project_manager", "technical_manager"]))):
+def activate_safe(tenant_id: str, background_tasks: BackgroundTasks, token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["owner", "marketing", "developer"]))):
     background_tasks.add_task(_bulk_user_action_task, tenant_id, token, True)
     return {"message": "Safe activation started in background"}
 
@@ -342,7 +350,7 @@ def schedule_deactivation(
     duration: int = Body(..., embed=True), 
     unit: str = Body("minutes", embed=True),
     token: str = Depends(get_tb_token), 
-    current_user: models.User = Depends(auth.require_role(["admin", "project_manager", "technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "marketing", "developer"]))
 ):
     delay_seconds = 0
     if unit.lower().startswith("s"): # seconds
@@ -367,10 +375,99 @@ def schedule_deactivation(
 
 
 @router.post("/user/{user_id}/toggle")
-def toggle_user(user_id: str, enabled: bool = Body(..., embed=True), token: str = Depends(get_tb_token), current_user: models.User = Depends(auth.require_role(["admin", "project_manager"]))):
-    success = thingsboard.toggle_user_credentials(token, user_id, enabled)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to toggle user")
+def toggle_user(
+    user_id: str, 
+    enabled: bool = Body(..., embed=True), 
+    tenant_id: Optional[str] = Body(None, embed=True),
+    token: str = Depends(get_tb_token), 
+    current_user: models.User = Depends(auth.require_role(["owner", "marketing"]))
+):
+    # 1. Fetch User Details to check Authority
+    target_user = thingsboard.get_user_by_id(token, user_id)
+    active_token = token
+    
+    tenant_id_from_token = None
+    
+    # Fallback/Recovery Logic
+    # If we have explicit tenant_id from frontend, use it.
+    target_tenant_id = tenant_id
+
+    # If not provided, try to find it from user object
+    if not target_tenant_id and target_user and target_user.get('tenantId'):
+        target_tenant_id = target_user.get('tenantId', {}).get('id')
+
+    # If still not found (e.g. SysAdmin couldn't read user), try token recovery
+    if not target_tenant_id:
+        try:
+            # SysAdmin can login as user
+            user_token_str = thingsboard.get_user_token(token, user_id)
+            if user_token_str:
+                # Decode JWT to find tenantId
+                import base64
+                import json
+                # JWT is header.payload.signature
+                parts = user_token_str.split(".")
+                if len(parts) > 1:
+                    payload = parts[1]
+                    # Pad base64
+                    payload += "=" * ((4 - len(payload) % 4) % 4)
+                    decoded = base64.b64decode(payload)
+                    token_data = json.loads(decoded)
+                    tenant_id_from_token = token_data.get("tenantId")
+                    target_tenant_id = tenant_id_from_token
+        except Exception:
+            pass
+
+    # Determine validation logic
+    should_impersonate = False
+    
+    # Logic:
+    # 1. If we know it's NOT a Tenant Admin (via target_user authority check), we MUST impersonate.
+    # 2. If we don't have target_user (SysAdmin blind access), we assume we MUST impersonate if we found a tenant_id.
+    #    Why? Because if it WAS a Tenant Admin, we probably could have read it (unless it's another tenant's admin? unlikely for SysAdmin).
+    #    Safest is to impersonate the Tenant Admin of that tenant.
+
+    if target_user:
+        if target_user.get('authority') != 'TENANT_ADMIN':
+            should_impersonate = True
+    elif target_tenant_id:
+        should_impersonate = True
+
+    if should_impersonate and target_tenant_id:
+        
+        # Optimization: Check if caller is ALREADY the correct Tenant Admin
+        caller = thingsboard.get_current_tb_user(token)
+        
+        if caller and caller.get('authority') == 'TENANT_ADMIN':
+            caller_tenant_id = caller.get('tenantId', {}).get('id')
+            if caller_tenant_id == target_tenant_id:
+                # Caller is the Tenant Admin for this user -> No impersonation needed
+                should_impersonate = False
+        
+        if should_impersonate:
+            # Impersonate Tenant Admin
+            # Find a Tenant Admin
+            ta = thingsboard.get_first_tenant_admin(token, target_tenant_id)
+            if ta:
+                ta_token = thingsboard.get_user_token(token, ta['id']['id'])
+                if ta_token:
+                    active_token = ta_token
+
+    print(f"DEBUG: Final Token starts with: {active_token[:10]}...") 
+    result = thingsboard.toggle_user_credentials(active_token, user_id, enabled)
+
+    if not result.get("success"):
+        status_code = result.get("status_code", 400)
+        detail = result.get("detail", "Failed to toggle user status")
+        # Try to parse TB error message if JSON
+        try:
+            import json
+            detail_json = json.loads(detail)
+            if "message" in detail_json:
+                detail = detail_json["message"]
+        except:
+            pass
+        raise HTTPException(status_code=status_code, detail=detail)
     return {"status": "success"}
 
 @router.post("/profile")
@@ -378,7 +475,7 @@ def create_profile(
     name: str = Body(..., embed=True),
     description: Optional[str] = Body(None, embed=True),
     token: str = Depends(get_tb_token),
-    current_user: models.User = Depends(auth.require_role(["technical_manager"]))
+    current_user: models.User = Depends(auth.require_role(["owner", "co_owner", "developer"]))
 ):
     profile = thingsboard.create_tenant_profile(token, name, description)
     if not profile:

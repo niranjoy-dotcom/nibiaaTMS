@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import CreateUsecaseModal from './CreateUsecaseModal';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Edit2 } from 'lucide-react';
 
 const UsecaseMappingSection = () => {
     const { api } = useAuth();
     const [usecases, setUsecases] = useState([]);
     const [showModal, setShowModal] = useState(false);
+    const [editingUsecase, setEditingUsecase] = useState(null);
 
     useEffect(() => {
         fetchUsecases();
@@ -19,6 +20,16 @@ const UsecaseMappingSection = () => {
         } catch (err) {
             console.error("Failed to fetch usecases", err);
         }
+    };
+
+    const handleEdit = (usecase) => {
+        setEditingUsecase(usecase);
+        setShowModal(true);
+    };
+
+    const handleCloseModal = () => {
+        setShowModal(false);
+        setEditingUsecase(null);
     };
 
     const handleDelete = async (id) => {
@@ -40,7 +51,7 @@ const UsecaseMappingSection = () => {
                     className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                 >
                     <Plus className="h-4 w-4 mr-1" />
-                    Add Usecase
+                    Create Usecase
                 </button>
             </div>
             <div className="overflow-x-auto">
@@ -69,6 +80,12 @@ const UsecaseMappingSection = () => {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                     <button 
+                                        onClick={() => handleEdit(u)}
+                                        className="text-blue-600 hover:text-blue-900 mr-3"
+                                    >
+                                        <Edit2 className="h-5 w-5" />
+                                    </button>
+                                    <button 
                                         onClick={() => handleDelete(u.id)}
                                         className="text-red-600 hover:text-red-900"
                                     >
@@ -89,8 +106,9 @@ const UsecaseMappingSection = () => {
             </div>
             <CreateUsecaseModal 
                 show={showModal} 
-                onClose={() => setShowModal(false)} 
+                onClose={handleCloseModal} 
                 onSuccess={fetchUsecases} 
+                initialData={editingUsecase}
             />
         </div>
     );

@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, AlertCircle, Edit2 } from 'lucide-react';
 
 const PlanMappingSection = () => {
     const { api } = useAuth();
     const [mappings, setMappings] = useState([]);
     const [profiles, setProfiles] = useState([]);
+    const [zohoPlans, setZohoPlans] = useState([]);
     const [newMapping, setNewMapping] = useState({ zoho_plan_keyword: '', tb_profile_name: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [editingId, setEditingId] = useState(null);
 
     useEffect(() => {
         fetchMappings();
         fetchProfiles();
+        fetchZohoPlans();
     }, []);
 
     const fetchMappings = async () => {
@@ -26,10 +29,35 @@ const PlanMappingSection = () => {
 
     const fetchProfiles = async () => {
         try {
-            const res = await api.get('/admin/tb-profiles');
+            const res = await api.get('/tb/profiles');
             setProfiles(res.data);
         } catch (err) {
             console.error("Failed to fetch profiles", err);
+        }
+    };
+
+    const fetchZohoPlans = async () => {
+        try {
+            const res = await api.get('/zoho/plans');
+            // Filter out duplicates based on plan name
+            const uniquePlans = [];
+            const seenNames = new Set();
+
+            if (Array.isArray(res.data)) {
+                res.data.forEach(plan => {
+                    // Normalize name for deduplication (trim whitespace)
+                    // Backend returns plan_name, older API returned name
+                    const rawName = plan.plan_name || plan.name;
+                    const name = rawName ? rawName.trim() : '';
+                    if (name && !seenNames.has(name)) {
+                        seenNames.add(name);
+                        uniquePlans.push(plan);
+                    }
+                });
+            }
+            setZohoPlans(uniquePlans);
+        } catch (err) {
+            console.error("Failed to fetch zoho plans", err);
         }
     };
 
@@ -37,12 +65,31 @@ const PlanMappingSection = () => {
         e.preventDefault();
         setError('');
         try {
-            await api.post('/admin/plan-mappings', newMapping);
+            if (editingId) {
+                await api.put(`/admin/plan-mappings/${editingId}`, newMapping);
+                setEditingId(null);
+            } else {
+                await api.post('/admin/plan-mappings', newMapping);
+            }
             setNewMapping({ zoho_plan_keyword: '', tb_profile_name: '' });
             fetchMappings();
         } catch (err) {
-            setError('Failed to create mapping. It might already exist.');
+            setError(editingId ? 'Failed to update mapping' : 'Failed to create mapping. It might already exist.');
         }
+    };
+
+    const handleEdit = (mapping) => {
+        setNewMapping({
+            zoho_plan_keyword: mapping.zoho_plan_keyword,
+            tb_profile_name: mapping.tb_profile_name
+        });
+        setEditingId(mapping.id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEdit = () => {
+        setNewMapping({ zoho_plan_keyword: '', tb_profile_name: '' });
+        setEditingId(null);
     };
 
     const handleDelete = async (id) => {
@@ -76,16 +123,19 @@ const PlanMappingSection = () => {
 
                 <form onSubmit={handleCreate} className="mb-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-12 items-end">
                     <div className="sm:col-span-5">
-                        <label className="block text-sm font-medium text-slate-700">Zoho Plan Keyword</label>
-                        <input
-                            type="text"
-                            className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
-                            placeholder="e.g. Basic, Standard"
+                        <label className="block text-sm font-medium text-slate-700">Zoho Plan Name</label>
+                        <select
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
                             value={newMapping.zoho_plan_keyword}
                             onChange={(e) => setNewMapping({ ...newMapping, zoho_plan_keyword: e.target.value })}
                             required
-                        />
-                        <p className="mt-1 text-xs text-slate-500">Matches if plan name contains this keyword</p>
+                        >
+                            <option value="">Select Zoho Plan</option>
+                            {zohoPlans.map(plan => (
+                                <option key={plan.plan_code} value={plan.plan_name || plan.name}>{plan.plan_name || plan.name}</option>
+                            ))}
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500">Select a plan from Zoho</p>
                     </div>
                     <div className="sm:col-span-5">
                         <label className="block text-sm font-medium text-slate-700">TB Profile</label>
@@ -97,18 +147,29 @@ const PlanMappingSection = () => {
                         >
                             <option value="">Select TB Profile</option>
                             {profiles.map(p => (
-                                <option key={p.id} value={p.name}>{p.name}</option>
+                                <option key={p.id?.id || p.id} value={p.name}>{p.name}</option>
                             ))}
                         </select>
                     </div>
                     <div className="sm:col-span-2">
-                        <button 
-                            type="submit" 
-                            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                        >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add
-                        </button>
+                        <div className="flex gap-2">
+                            <button
+                                type="submit"
+                                className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                            >
+                                <Plus className="h-4 w-4 mr-1" />
+                                {editingId ? 'Update' : 'Add'}
+                            </button>
+                            {editingId && (
+                                <button
+                                    type="button"
+                                    onClick={handleCancelEdit}
+                                    className="inline-flex justify-center items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none"
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </form>
 
@@ -116,7 +177,7 @@ const PlanMappingSection = () => {
                     <table className="min-w-full divide-y divide-slate-200">
                         <thead className="bg-slate-50">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Zoho Plan Keyword</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Zoho Plan Name</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">TB Profile Name</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -127,7 +188,13 @@ const PlanMappingSection = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{m.zoho_plan_keyword}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{m.tb_profile_name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                        <button 
+                                        <button
+                                            onClick={() => handleEdit(m)}
+                                            className="text-blue-600 hover:text-blue-900 mr-3"
+                                        >
+                                            <Edit2 className="h-5 w-5" />
+                                        </button>
+                                        <button
                                             onClick={() => handleDelete(m.id)}
                                             className="text-red-600 hover:text-red-900"
                                         >

@@ -48,8 +48,8 @@ def startup_event():
     db = SessionLocal()
     
     # Ensure Admin exists
-    admin_email = os.getenv("ADMIN_EMAIL", "adminuser@nibiaa.com")
-    admin_password = os.getenv("ADMIN_PASSWORD", "admin12")
+    admin_email = os.getenv("ADMIN_EMAIL", "support@nibiaa.com")
+    admin_password = os.getenv("ADMIN_PASSWORD", "Nibiaa@12")
     
     user = db.query(User).filter(User.email == admin_email).first()
     if not user:

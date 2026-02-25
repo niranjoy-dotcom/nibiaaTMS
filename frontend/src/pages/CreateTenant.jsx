@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const CreateTenant = () => {
   const { api, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     title: '',
     use_case: '',
@@ -22,11 +23,14 @@ const CreateTenant = () => {
   const [profiles, setProfiles] = useState([]);
   const [technicalManagers, setTechnicalManagers] = useState([]);
   const [projectManagers, setProjectManagers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [usecases, setUsecases] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [zohoTenants, setZohoTenants] = useState([]);
   const [existingTenants, setExistingTenants] = useState([]);
   const [planMappings, setPlanMappings] = useState([]);
+  const [restrictedProfile, setRestrictedProfile] = useState(null);
+  const [restrictedUseCase, setRestrictedUseCase] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -42,8 +46,88 @@ const CreateTenant = () => {
     fetchPlanMappings();
   }, []);
 
+  // Handle pre-filled data from Zoho Subscriptions
   useEffect(() => {
-    // Generate Admin Email dynamically
+    if (location.state && location.state.zohoSubscription && profiles.length > 0 && usecases.length > 0) {
+      const sub = location.state.zohoSubscription;
+
+      // Reuse the logic from handleZohoTenantChange but with the subscription object directly
+      // Map Plan Code to UseCase
+      let usecase = '';
+      if (sub.plan_code) {
+        const prefix = sub.plan_code.split('-')[0].trim();
+        const matchingUsecase = usecases.find(u => u.zoho_prefix === prefix);
+        if (matchingUsecase) {
+          usecase = matchingUsecase.name;
+        }
+      }
+
+      if (usecase) {
+        setRestrictedUseCase(usecase);
+      } else {
+        setRestrictedUseCase(null);
+      }
+
+      // Map Plan Name to Profile
+      let targetProfileName = null;
+      if (sub.plan_name || sub.plan_code) {
+        const planName = (sub.plan_name || '').toLowerCase();
+        const planCode = (sub.plan_code || '').toLowerCase();
+        for (const mapping of planMappings) {
+          const keyword = (mapping.zoho_plan_keyword || '').toLowerCase();
+          if ((planName && planName.includes(keyword)) || (planCode && planCode.includes(keyword))) {
+            targetProfileName = mapping.tb_profile_name;
+            break;
+          }
+        }
+      }
+
+      // Fallback Profile Logic
+      // Removed hardcoded fallback logic as per request
+
+      let matchingProfile = null;
+      if (targetProfileName) {
+        matchingProfile = profiles.find(p => p.name === targetProfileName);
+      }
+      // REMOVED: Strict mapping enforcement requested.
+      /*
+      if (!matchingProfile && sub.plan_name) {
+         matchingProfile = profiles.find(p => p.name.toLowerCase().includes(sub.plan_name.toLowerCase()));
+      }
+      */
+
+      if (matchingProfile) {
+        setRestrictedProfile(matchingProfile);
+      } else {
+        setRestrictedProfile(null);
+      }
+
+      const profileId = matchingProfile ? matchingProfile.id.id : (profiles.length > 0 ? profiles[0].id.id : '');
+
+      // Find the stored Zoho Tenant ID if possible
+      let storedTenantId = '';
+      if (zohoTenants.length > 0) {
+        const matchingStoredTenant = zohoTenants.find(zt => zt.subscription_id === sub.subscription_id);
+        if (matchingStoredTenant) {
+          storedTenantId = matchingStoredTenant.id;
+        }
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        title: sub.customer_name || '',
+        use_case: usecase,
+        profile_id: profileId,
+        customer_email: sub.email || '',
+        last_name: `${sub.customer_name || ''} ${sub.plan_code || ''}`.trim(),
+        zoho_plan_details: `${sub.plan_name || 'N/A'} (${sub.plan_code || 'N/A'})`,
+        zoho_tenant_id: storedTenantId
+      }));
+    }
+  }, [location.state, profiles, usecases, planMappings, zohoTenants]);
+
+  useEffect(() => {
+    // Generate Owner Email dynamically
     if (formData.technical_manager_id) {
       const tm = technicalManagers.find(u => u.id === parseInt(formData.technical_manager_id));
       if (tm) {
@@ -52,12 +136,12 @@ const CreateTenant = () => {
         setGeneratedEmail(`${tmName}+${cleanTitle}@nibiaa.com`);
       }
     } else {
-      setGeneratedEmail('Auto-generated (Technical Manager + Tenant Name)');
+      setGeneratedEmail('Auto-generated (Developer + Tenant Name)');
     }
   }, [formData.technical_manager_id, formData.title, technicalManagers]);
 
   useEffect(() => {
-    if (user && user.role === 'project_manager') {
+    if (user && user.role === 'marketing') {
       setFormData(prev => ({ ...prev, project_manager_id: user.id }));
     }
   }, [user]);
@@ -123,9 +207,10 @@ const CreateTenant = () => {
   const fetchUsers = async () => {
     try {
       const res = await api.get('/users/');
+      setAllUsers(res.data || []);
       // Filter users who have the specific role (handling comma-separated roles)
-      const tms = res.data.filter(u => u.role && u.role.split(',').map(r => r.trim()).includes('technical_manager'));
-      const pms = res.data.filter(u => u.role && u.role.split(',').map(r => r.trim()).includes('project_manager'));
+      const tms = res.data.filter(u => u.role && u.role.split(',').map(r => r.trim()).includes('developer'));
+      const pms = res.data.filter(u => u.role && u.role.split(',').map(r => r.trim()).includes('marketing'));
       setTechnicalManagers(tms);
       setProjectManagers(pms);
     } catch (err) {
@@ -133,11 +218,13 @@ const CreateTenant = () => {
     }
   };
 
+
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let updates = { [name]: value };
 
-    // Auto-populate First Name when Technical Manager is selected
+    // Auto-populate First Name when Developer is selected
     if (name === 'technical_manager_id') {
       const tm = technicalManagers.find(u => u.id === parseInt(value));
       if (tm) {
@@ -150,73 +237,113 @@ const CreateTenant = () => {
 
   const handleZohoTenantChange = (e) => {
     const selectedId = e.target.value;
-    if (!selectedId) return;
+    if (!selectedId) {
+      setRestrictedProfile(null);
+      setRestrictedUseCase(null);
+      setFormData(prev => ({
+        ...prev,
+        title: '',
+        use_case: '',
+        customer_email: '',
+        last_name: '',
+        zoho_plan_details: '',
+        zoho_tenant_id: ''
+      }));
+      return;
+    }
 
-    const selectedZohoTenant = zohoTenants.find(zt => zt.id === parseInt(selectedId));
+    // Use loose comparison or string conversion to ensure match
+    const selectedZohoTenant = zohoTenants.find(zt => String(zt.id) === String(selectedId));
+
     if (selectedZohoTenant) {
-      // Map Plan Code to UseCase using dynamic mapping from backend
-      let usecase = 'Unknown Use Case';
-      
-      // 1. Try WMS/ETS logic first (common patterns)
-      if (selectedZohoTenant.plan_code) {
-        if (selectedZohoTenant.plan_code.includes('WMS')) {
-          usecase = 'Workforce Management System';
-        } else if (selectedZohoTenant.plan_code.includes('ETS')) {
-          usecase = 'Equipment Tracking System';
-        }
-      }
+      // --- Use Case Mapping Logic ---
+      // Requirement: Initial Three or Four Character before '-' in Plan Code maps to Use Case Prefix
+      let usecase = '';
+      const pCode = (selectedZohoTenant.plan_code || '').toUpperCase();
 
-      // 2. Try prefix matching if not found
-      if (usecase === 'Unknown Use Case' && selectedZohoTenant.plan_code && selectedZohoTenant.plan_code.length >= 3) {
-        const prefix = selectedZohoTenant.plan_code.substring(0, 3);
-        const matchingUsecase = usecases.find(u => u.zoho_prefix === prefix);
-        if (matchingUsecase) {
-          usecase = matchingUsecase.name;
-        }
-      }
+      if (pCode) {
+        // Extract prefix (everything before the first hyphen)
+        const prefix = pCode.split('-')[0].trim();
 
-      // Map Plan Name to Profile
-      let targetProfileName = null;
-      
-      // 1. Try to find a match using Plan Mappings from backend
-      if (selectedZohoTenant.plan_name || selectedZohoTenant.plan_code) {
-        const planName = (selectedZohoTenant.plan_name || '').toLowerCase();
-        const planCode = (selectedZohoTenant.plan_code || '').toLowerCase();
-        
-        for (const mapping of planMappings) {
-          const keyword = (mapping.zoho_plan_keyword || '').toLowerCase();
-          if ((planName && planName.includes(keyword)) || 
-              (planCode && planCode.includes(keyword))) {
-            targetProfileName = mapping.tb_profile_name;
-            break;
+        if (prefix && usecases.length > 0) {
+          // Find usecase where zoho_prefix matches the extracted prefix
+          const matchingUsecase = usecases.find(u =>
+            u.zoho_prefix && u.zoho_prefix.trim().toUpperCase() === prefix
+          );
+
+          if (matchingUsecase) {
+            usecase = matchingUsecase.name;
           }
         }
       }
 
-      // 2. Fallback to hardcoded logic if no mapping found
-      if (!targetProfileName && selectedZohoTenant.plan_name) {
-        const planNameLower = selectedZohoTenant.plan_name.toLowerCase();
-        if (planNameLower.includes('basic') || planNameLower.includes('free') || planNameLower.includes('starter')) {
-          targetProfileName = 'Basic';
-        } else if (planNameLower.includes('standard') || planNameLower.includes('professional') || planNameLower.includes('plus')) {
-          targetProfileName = 'Standard';
-        } else if (planNameLower.includes('premium') || planNameLower.includes('enterprise') || planNameLower.includes('advanced')) {
-          targetProfileName = 'Premium';
+      // Fallback: If no prefix match found, try to match by name if possible (legacy support)
+      // REMOVED: Strict mapping enforcement requested. Only use prefix mapping.
+
+      if (usecase) {
+        setRestrictedUseCase(usecase);
+      } else {
+        setRestrictedUseCase(null);
+      }
+
+      // --- Profile Mapping Logic ---
+      // Requirement: Name Present in Plan name in Zoho tenant maps to TB Profile via mapping table
+      let targetProfileName = null;
+
+      if (selectedZohoTenant.plan_name || selectedZohoTenant.plan_code) {
+        const planName = (selectedZohoTenant.plan_name || '').trim().toLowerCase();
+        const planCode = (selectedZohoTenant.plan_code || '').trim().toLowerCase();
+
+        if (planMappings && planMappings.length > 0) {
+          for (const mapping of planMappings) {
+            const keyword = (mapping.zoho_plan_keyword || '').trim().toLowerCase();
+            if (!keyword) continue;
+
+            // 1. Exact Match (Priority)
+            if (planName === keyword || planCode === keyword) {
+              targetProfileName = mapping.tb_profile_name;
+              break;
+            }
+
+            // 2. Includes Match
+            if (planName.includes(keyword) || planCode.includes(keyword)) {
+              targetProfileName = mapping.tb_profile_name;
+              break;
+            }
+          }
         }
       }
 
-      // 3. Find the profile object that matches the target name
+      // Fallback to hardcoded logic if no mapping found (Safety net)
+      // Removed hardcoded fallback logic as per request
+
+      // Find the profile object that matches the target name
       let matchingProfile = null;
-      if (targetProfileName) {
+      if (targetProfileName && profiles.length > 0) {
+        // Try exact match
         matchingProfile = profiles.find(p => p.name === targetProfileName);
+
+        // Try case-insensitive match
+        if (!matchingProfile) {
+          matchingProfile = profiles.find(p => p.name.toLowerCase() === targetProfileName.toLowerCase());
+        }
+
+        // Try trimmed match
+        if (!matchingProfile) {
+          matchingProfile = profiles.find(p => p.name.trim() === targetProfileName.trim());
+        }
       }
-      
-      // 4. Extra Fallback: Try to find a profile that contains the plan name
-      if (!matchingProfile && selectedZohoTenant.plan_name) {
-         matchingProfile = profiles.find(p => p.name.toLowerCase().includes(selectedZohoTenant.plan_name.toLowerCase()));
+
+      // Extra Fallback: Try to find a profile that contains the plan name directly
+      // REMOVED: Strict mapping enforcement requested. Only use mapping table.
+
+      if (matchingProfile) {
+        setRestrictedProfile(matchingProfile);
+      } else {
+        setRestrictedProfile(null);
       }
-      
-      // 4. Fallback to first profile if still no match
+
+      // Final Fallback: Use the first available profile
       const profileId = matchingProfile ? matchingProfile.id.id : (profiles.length > 0 ? profiles[0].id.id : '');
 
       setFormData(prev => ({
@@ -249,9 +376,10 @@ const CreateTenant = () => {
         technical_manager_id: formData.technical_manager_id ? parseInt(formData.technical_manager_id) : null,
         project_manager_id: formData.project_manager_id ? parseInt(formData.project_manager_id) : null,
         task_template_ids: formData.task_template_ids.map(id => parseInt(id)),
-        zoho_tenant_id: formData.zoho_tenant_id ? parseInt(formData.zoho_tenant_id) : null
+        zoho_tenant_id: formData.zoho_tenant_id ? parseInt(formData.zoho_tenant_id) : null,
+
       });
-      
+
       setSuccessMessage(`Tenant "${formData.title}" and associated Project created successfully!`);
       setTimeout(() => {
         navigate('/');
@@ -268,7 +396,7 @@ const CreateTenant = () => {
       <div className="bg-white shadow sm:rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-base font-semibold leading-6 text-slate-900 text-center mb-6">Create New Tenant</h3>
-          
+
           {successMessage && (
             <div className="rounded-md bg-green-50 p-4 mb-4">
               <div className="flex">
@@ -278,7 +406,7 @@ const CreateTenant = () => {
               </div>
             </div>
           )}
-          
+
           {error && (
             <div className="rounded-md bg-red-50 p-4 mb-4">
               <div className="flex">
@@ -290,45 +418,47 @@ const CreateTenant = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium leading-6 text-slate-900">Select Zoho Customer</label>
-              <select 
-                className="mt-2 block w-full rounded-md border-0 py-3 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
-                onChange={handleZohoTenantChange}
-                required
-              >
-                <option value="">Select Zoho Customer</option>
-                {zohoTenants
-                  .filter(zt => zt.status !== 'Provisioned')
-                  .map(zt => {
-                    const nameExists = existingTenants.some(et => et.title === zt.customer_name);
-                    return (
-                      <option key={zt.id} value={zt.id}>
-                        {zt.customer_name} ({zt.email}) - {zt.plan_code}
-                        {nameExists ? ' (Name Exists)' : ''}
-                      </option>
-                    );
-                  })}
-              </select>
-            </div>
+            {!location.state?.zohoSubscription && (
+              <div>
+                <label className="block text-sm font-medium leading-6 text-slate-900">Select Zoho Customer</label>
+                <select
+                  className="mt-2 block w-full rounded-md border-0 py-2.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
+                  onChange={handleZohoTenantChange}
+                  required
+                >
+                  <option value="">Select Zoho Customer</option>
+                  {zohoTenants
+                    .filter(zt => zt.status !== 'Provisioned')
+                    .map(zt => {
+                      const nameExists = existingTenants.some(et => et.title === zt.customer_name);
+                      return (
+                        <option key={zt.id} value={zt.id}>
+                          {zt.customer_name} ({zt.email}) - {zt.plan_code}
+                          {nameExists ? ' (Name Exists)' : ''}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium leading-6 text-slate-900">Zoho Plan Details</label>
-              <input 
-                type="text" 
-                className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 bg-slate-50 text-base sm:leading-6"
-                value={formData.zoho_plan_details || 'Not selected'} 
-                disabled 
+              <input
+                type="text"
+                className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 bg-slate-50 text-base sm:leading-6"
+                value={formData.zoho_plan_details || 'Not selected'}
+                disabled
               />
               <p className="mt-1 text-xs text-slate-500">Auto-populated from selected Zoho Customer.</p>
             </div>
 
             <div>
               <label className="block text-sm font-medium leading-6 text-slate-900">Tenant Title</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 name="title"
-                className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
+                className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
                 required
                 value={formData.title}
                 onChange={handleChange}
@@ -340,10 +470,10 @@ const CreateTenant = () => {
 
             <div>
               <label className="block text-sm font-medium leading-6 text-slate-900">Customer Email</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 name="customer_email"
-                className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
+                className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
                 value={formData.customer_email}
                 onChange={handleChange}
                 placeholder="Customer's email address"
@@ -352,19 +482,25 @@ const CreateTenant = () => {
 
             <div>
               <label className="block text-sm font-medium leading-6 text-slate-900">Use Case</label>
-              <select 
+              <select
                 name="use_case"
-                className="mt-2 block w-full rounded-md border-0 py-3 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
+                className="mt-2 block w-full rounded-md border-0 py-2.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
                 value={formData.use_case}
                 onChange={handleChange}
                 required
               >
-                <option value="">Select Use Case...</option>
-                {usecases.map(u => (
-                  <option key={u.id} value={u.name}>{u.name}</option>
-                ))}
-                {formData.use_case === 'Unknown Use Case' && (
-                  <option value="Unknown Use Case">Unknown Use Case</option>
+                {restrictedUseCase ? (
+                  <option value={restrictedUseCase}>{restrictedUseCase}</option>
+                ) : (
+                  <>
+                    <option value="">Select Use Case...</option>
+                    {usecases.map(u => (
+                      <option key={u.id} value={u.name}>{u.name}</option>
+                    ))}
+                    {formData.use_case === 'Unknown Use Case' && (
+                      <option value="Unknown Use Case">Unknown Use Case</option>
+                    )}
+                  </>
                 )}
               </select>
               <p className="mt-1 text-xs text-slate-500">Auto-selected based on Zoho Plan Code.</p>
@@ -372,77 +508,109 @@ const CreateTenant = () => {
 
             <div>
               <label className="block text-sm font-medium leading-6 text-slate-900">Tenant Profile (Plan)</label>
-              <select 
+              <select
                 name="profile_id"
-                className="mt-2 block w-full rounded-md border-0 py-3 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
-                value={formData.profile_id} 
+                className="mt-2 block w-full rounded-md border-0 py-2.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
+                value={formData.profile_id}
                 onChange={handleChange}
                 required
               >
-                {profiles.map(p => (
-                  <option key={p.id.id} value={p.id.id}>{p.name}</option>
-                ))}
+                {restrictedProfile ? (
+                  <option value={restrictedProfile.id.id}>{restrictedProfile.name}</option>
+                ) : (
+                  profiles.map(p => (
+                    <option key={p.id.id} value={p.id.id}>{p.name}</option>
+                  ))
+                )}
               </select>
               <p className="mt-1 text-xs text-slate-500">Auto-selected based on Zoho Plan Name.</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium leading-6 text-slate-900">Assign Project Manager</label>
-              {user && user.role === 'project_manager' ? (
-                <input 
-                  type="text" 
-                  className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 bg-slate-50 text-base sm:leading-6"
-                  value={`${user.email} (You)`} 
-                  disabled 
-                />
-              ) : (
-                <select 
-                  name="project_manager_id"
-                  className="mt-2 block w-full rounded-md border-0 py-3 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
-                  value={formData.project_manager_id} 
-                  onChange={handleChange}
-                >
-                  <option value="">Select Project Manager (Leave blank for Admin)</option>
-                  {projectManagers.map(pm => (
-                    <option key={pm.id} value={pm.id}>{pm.email}</option>
-                  ))}
-                </select>
-              )}
+            {/* Project Management Section */}
+            <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+              <h4 className="text-sm font-semibold text-slate-900 mb-4 border-b border-slate-200 pb-2">Project Management Assignment</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium leading-6 text-slate-900">Assign Marketing</label>
+                  {user && user.role === 'marketing' ? (
+                    <input
+                      type="text"
+                      className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 bg-slate-50 text-base sm:leading-6"
+                      value={`${user.email} (You)`}
+                      disabled
+                    />
+                  ) : (
+                    <select
+                      name="project_manager_id"
+                      className="mt-2 block w-full rounded-md border-0 py-2.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
+                      value={formData.project_manager_id}
+                      onChange={handleChange}
+                    >
+                      <option value="">Select Marketing (Leave blank for Owner)</option>
+                      {projectManagers.map(pm => (
+                        <option key={pm.id} value={pm.id}>{pm.email}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium leading-6 text-slate-900">Assign Technical Manager <span className="text-red-500">*</span></label>
-              <select 
-                name="technical_manager_id"
-                className="mt-2 block w-full rounded-md border-0 py-3 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
-                value={formData.technical_manager_id} 
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Technical Manager</option>
-                {technicalManagers.map(tm => (
-                  <option key={tm.id} value={tm.id}>{tm.email}</option>
-                ))}
-              </select>
+
+            {/* Technical Management Section */}
+            <div className="bg-slate-50 p-4 rounded-md border border-slate-200">
+              <h4 className="text-sm font-semibold text-slate-900 mb-4 border-b border-slate-200 pb-2">Technical Management Assignment</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium leading-6 text-slate-900">Assign Developer <span className="text-red-500">*</span></label>
+                  <select
+                    name="technical_manager_id"
+                    className="mt-2 block w-full rounded-md border-0 py-2.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
+                    value={formData.technical_manager_id}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Select Developer</option>
+                    {technicalManagers.map(tm => (
+                      <option key={tm.id} value={tm.id}>{tm.email}</option>
+                    ))}
+                  </select>
+                </div>
+
+              </div>
             </div>
 
+
             <div>
-              <label className="block text-sm font-medium leading-6 text-slate-900">Tenant Admin Email</label>
-              <input 
-                type="text" 
-                className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 bg-slate-50 text-base sm:leading-6"
-                value={generatedEmail} 
+              <label className="block text-sm font-medium leading-6 text-slate-900">Tenant Owner Email</label>
+              <input
+                type="text"
+                className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 bg-slate-50 text-base sm:leading-6"
+                value={generatedEmail}
                 disabled
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium leading-6 text-slate-900">Assign Task Templates</label>
-              <select 
+              <div className="flex justify-between items-center">
+                <label className="block text-sm font-medium leading-6 text-slate-900">Assign Task Templates</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allTemplateIds = templates.map(t => t.id.toString());
+                    setFormData({ ...formData, task_template_ids: allTemplateIds });
+                  }}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-500"
+                >
+                  Select All
+                </button>
+              </div>
+              <select
                 name="task_template_ids"
-                className="mt-2 block w-full rounded-md border-0 py-3 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
+                className="mt-2 block w-full rounded-md border-0 py-2.5 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary text-base sm:leading-6"
                 multiple
-                value={formData.task_template_ids} 
+                value={formData.task_template_ids}
                 onChange={(e) => {
                   const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
                   setFormData({ ...formData, task_template_ids: selectedOptions });
@@ -459,25 +627,25 @@ const CreateTenant = () => {
 
             <div className="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
               <div className="sm:col-span-3">
-                <label className="block text-sm font-medium leading-6 text-slate-900">Admin First Name</label>
-                <input 
-                  type="text" 
+                <label className="block text-sm font-medium leading-6 text-slate-900">Owner First Name</label>
+                <input
+                  type="text"
                   name="first_name"
-                  className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
-                  value={formData.first_name} 
-                  onChange={handleChange} 
-                  required 
+                  className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
+                  value={formData.first_name}
+                  onChange={handleChange}
+                  required
                 />
               </div>
               <div className="sm:col-span-3">
-                <label className="block text-sm font-medium leading-6 text-slate-900">Admin Last Name</label>
-                <input 
-                  type="text" 
+                <label className="block text-sm font-medium leading-6 text-slate-900">Owner Last Name</label>
+                <input
+                  type="text"
                   name="last_name"
-                  className="mt-2 block w-full rounded-md border-0 py-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
-                  value={formData.last_name} 
-                  onChange={handleChange} 
-                  required 
+                  className="mt-2 block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary text-base sm:leading-6"
+                  value={formData.last_name}
+                  onChange={handleChange}
+                  required
                 />
               </div>
             </div>
@@ -496,13 +664,13 @@ const CreateTenant = () => {
                     </svg>
                     Creating...
                   </>
-                ) : 'Create Tenant & Admin'}
+                ) : 'Create Tenant & Owner'}
               </button>
             </div>
           </form>
-        </div>
-      </div>
-    </div>
+        </div >
+      </div >
+    </div >
   );
 };
 

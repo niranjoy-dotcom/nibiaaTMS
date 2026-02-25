@@ -6,6 +6,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 8090,
-    host: true
+    strictPort: true,
+    host: true,
+    proxy: {
+      '/api': 'http://localhost:8080',
+      '/docs': 'http://localhost:8080',
+      '/openapi.json': 'http://localhost:8080'
+    }
   }
 })

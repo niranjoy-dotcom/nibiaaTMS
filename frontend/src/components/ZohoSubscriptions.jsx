@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, RefreshCw, Package, AlertCircle, Loader2, DollarSign, CreditCard, TrendingUp, Calendar, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Download, RefreshCw, Package, AlertCircle, Loader2, DollarSign, CreditCard, TrendingUp, Calendar, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, User, UserCheck, Briefcase } from 'lucide-react';
 import { getApiUrl } from '../config';
 
 const ZohoSubscriptions = () => {
+  const navigate = useNavigate();
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [provisioning, setProvisioning] = useState({});
-  
-  // New State for Technical Manager Assignment
+  const [freeDevCount, setFreeDevCount] = useState(0);
+  const [activeProjectCount, setActiveProjectCount] = useState(0);
+
+  // New State for Developer Assignment
   const [technicalManagers, setTechnicalManagers] = useState([]);
   const [showProvisionModal, setShowProvisionModal] = useState(false);
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState(null);
@@ -24,7 +28,7 @@ const ZohoSubscriptions = () => {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  // Fetch Technical Managers
+  // Fetch Developers
   const fetchTechnicalManagers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -46,15 +50,19 @@ const ZohoSubscriptions = () => {
     }
   };
 
-  const handleProvisionClick = (subId) => {
-    setSelectedSubscriptionId(subId);
-    setSelectedManagerId('');
-    setShowProvisionModal(true);
+  const handleProvisionClick = (sub) => {
+    // Navigate to Create Tenant page with pre-filled data
+    navigate('/create-tenant', {
+      state: {
+        zohoSubscription: sub
+      }
+    });
   };
 
+  /*
   const confirmProvision = async () => {
     if (!selectedManagerId) {
-      alert("Please select a Technical Manager");
+      alert("Please select a Developer");
       return;
     }
     setShowProvisionModal(false);
@@ -99,6 +107,34 @@ const ZohoSubscriptions = () => {
       setProvisioning(prev => ({ ...prev, [subscriptionId]: false }));
     }
   };
+  */
+
+  const fetchAdditionalStats = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Fetch Free Developers
+      const freeDevRes = await fetch(`${getApiUrl()}/admin/stats/free-developers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (freeDevRes.ok) {
+        const data = await freeDevRes.json();
+        setFreeDevCount(data.free_count);
+      }
+
+      // Fetch Dashboard Stats for Project Status
+      const dashboardRes = await fetch(`${getApiUrl()}/admin/stats/dashboard`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (dashboardRes.ok) {
+        const data = await dashboardRes.json();
+        setActiveProjectCount(data.projects?.active || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch additional stats:", err);
+    }
+  };
 
   // Fetch subscriptions from Zoho Billing API via Backend Proxy
   const fetchSubscriptions = async () => {
@@ -128,7 +164,7 @@ const ZohoSubscriptions = () => {
       }
 
       const data = await response.json();
-      
+
       if (data.subscriptions && data.subscriptions.length > 0) {
         setSubscriptions(data.subscriptions);
         setError('');
@@ -150,80 +186,8 @@ const ZohoSubscriptions = () => {
   useEffect(() => {
     fetchSubscriptions();
     fetchTechnicalManagers();
+    fetchAdditionalStats();
   }, []);
-
-  // Demo data
-  const loadDemoData = () => {
-    const demoData = [
-      {
-        customer_id: "2328557000004090037",
-        customer_name: "Nibiaa",
-        email: "rajjit@nibiaa.com",
-        phone: "",
-        mobile_phone: "7005622242",
-        plan_name: "Basic",
-        plan_code: "ETS-BAS-01",
-        name: "Equipment Tracking Solutions-Basic",
-        sub_total: 2.00,
-        current_term_starts_at: "2025-12-23",
-        current_term_ends_at: "2026-01-02",
-        interval: 1,
-        interval_unit: "months",
-        auto_collect: true,
-        currency_code: "INR",
-        currency_symbol: "Rs.",
-        subscription_id: "2328557000004090035",
-        subscription_number: "EQT-00001",
-        is_metered_billing: false,
-        created_at: "2025-12-23",
-        activated_at: "2026-01-02",
-        status: "cancelledbycustomer",
-        amount: 2.36,
-        location_name: "Head Office",
-        cancelled_at: "2025-12-23",
-        created_time: "2025-12-23T16:14:45+0530",
-        updated_time: "2025-12-23T16:43:30+0530",
-        payment_terms: 0,
-        payment_terms_label: "Due on Receipt",
-        created_by: "rajjit@nibiaa.com"
-      },
-      {
-        customer_id: "2328557000001206051",
-        customer_name: "Nibiaa",
-        email: "hickson.laimayum@gmail.com",
-        phone: "",
-        mobile_phone: "9774433893",
-        plan_name: "test",
-        plan_code: "T_001",
-        name: "Smart Restroom Solution Pricing Plan-test",
-        sub_total: 10.00,
-        current_term_starts_at: "2025-06-20",
-        current_term_ends_at: "2025-07-20",
-        interval: 1,
-        interval_unit: "months",
-        auto_collect: false,
-        currency_code: "INR",
-        currency_symbol: "Rs.",
-        subscription_id: "2328557000001206049",
-        subscription_number: "SUB-00001",
-        is_metered_billing: false,
-        created_at: "2025-06-20",
-        activated_at: "2025-06-20",
-        status: "cancelledbycustomer",
-        amount: 10.00,
-        last_billing_at: "2025-06-20",
-        location_name: "Head Office",
-        cancelled_at: "2025-06-20",
-        created_time: "2025-06-20T14:42:50+0530",
-        updated_time: "2025-06-20T15:37:34+0530",
-        payment_terms: 0,
-        payment_terms_label: "Due on Receipt",
-        created_by: "hickson.laimayum@gmail.com"
-      }
-    ];
-    
-    setSubscriptions(demoData);
-  };
 
   // Filter subscriptions
   const filteredSubscriptions = subscriptions.filter(sub => {
@@ -247,43 +211,43 @@ const ZohoSubscriptions = () => {
   // Get status badge color and icon
   const getStatusInfo = (status) => {
     const statusMap = {
-      live: { 
+      live: {
         color: 'bg-success-subtle text-success border-success-subtle',
         icon: CheckCircle,
         label: 'ACTIVE'
       },
-      active: { 
+      active: {
         color: 'bg-success-subtle text-success border-success-subtle',
         icon: CheckCircle,
         label: 'ACTIVE'
       },
-      cancelledbycustomer: { 
+      cancelledbycustomer: {
         color: 'bg-danger-subtle text-danger border-danger-subtle',
         icon: XCircle,
         label: 'CANCELLED'
       },
-      cancelled: { 
+      cancelled: {
         color: 'bg-danger-subtle text-danger border-danger-subtle',
         icon: XCircle,
         label: 'CANCELLED'
       },
-      expired: { 
+      expired: {
         color: 'bg-secondary-subtle text-secondary border-secondary-subtle',
         icon: Clock,
         label: 'EXPIRED'
       },
-      trial: { 
+      trial: {
         color: 'bg-primary-subtle text-primary border-primary-subtle',
         icon: Clock,
         label: 'TRIAL'
       },
-      future: { 
+      future: {
         color: 'bg-info-subtle text-info border-info-subtle',
         icon: Calendar,
         label: 'FUTURE'
       }
     };
-    return statusMap[status?.toLowerCase()] || { 
+    return statusMap[status?.toLowerCase()] || {
       color: 'bg-light text-slate-900 border-light',
       icon: AlertCircle,
       label: status?.toUpperCase() || 'UNKNOWN'
@@ -335,7 +299,7 @@ const ZohoSubscriptions = () => {
     ];
     const csvContent = [
       headers.join(','),
-      ...filteredSubscriptions.map(s => 
+      ...filteredSubscriptions.map(s =>
         [
           s.subscription_number,
           s.customer_name,
@@ -477,38 +441,38 @@ const ZohoSubscriptions = () => {
             </div>
           </div>
 
-          {/* Trial Users */}
+          {/* Which Developer are Free */}
           <div className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
             <div className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-500">In Trial</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-2">{stats.trial}</p>
+                  <p className="text-sm font-medium text-slate-500">Which Developer are Free</p>
+                  <p className="text-3xl font-bold text-slate-900 mt-2">{freeDevCount}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                  <Clock className="h-6 w-6 text-orange-600" />
+                  <UserCheck className="h-6 w-6 text-orange-600" />
                 </div>
               </div>
               <div className="mt-4 flex items-center text-sm">
-                <span className="text-slate-500">Potential conversions</span>
+                <span className="text-slate-500">Available Developers</span>
               </div>
             </div>
           </div>
 
-          {/* Expired */}
+          {/* Overall Project Status */}
           <div className="bg-white overflow-hidden shadow-sm rounded-xl border border-slate-200 hover:shadow-md transition-all duration-300 transform hover:-translate-y-1">
             <div className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-500">Expired</p>
-                  <p className="text-3xl font-bold text-slate-900 mt-2">{stats.expired}</p>
+                  <p className="text-sm font-medium text-slate-500">Overall Project Status</p>
+                  <p className="text-3xl font-bold text-slate-900 mt-2">{activeProjectCount}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 ring-1 ring-slate-200">
-                  <AlertCircle className="h-6 w-6 text-slate-600" />
+                  <Briefcase className="h-6 w-6 text-slate-600" />
                 </div>
               </div>
               <div className="mt-4 flex items-center text-sm">
-                <span className="text-slate-500">Win-back opportunities</span>
+                <span className="text-slate-500">Running Projects</span>
               </div>
             </div>
           </div>
@@ -547,9 +511,9 @@ const ZohoSubscriptions = () => {
               <p className="text-sm text-red-700">{error}</p>
               {(error.includes("invalid_code") || error.includes("invalid_token") || error.includes("access_denied") || error.includes("Failed to generate access token") || error.includes("not configured")) && (
                 <p className="mt-3 text-sm md:mt-0 md:ml-6">
-                  <a 
-                    href={`${getApiUrl()}/zoho/auth`} 
-                    target="_blank" 
+                  <a
+                    href={`${getApiUrl()}/zoho/auth`}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="whitespace-nowrap font-medium text-red-700 hover:text-red-600"
                   >
@@ -607,14 +571,6 @@ const ZohoSubscriptions = () => {
                   </>
                 )}
               </button>
-
-              <button
-                onClick={loadDemoData}
-                disabled={loading}
-                className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Load Demo Data
-              </button>
             </div>
           </div>
         </div>
@@ -639,7 +595,7 @@ const ZohoSubscriptions = () => {
                 {currentSubscriptions.map((sub) => {
                   const statusInfo = getStatusInfo(sub.status);
                   const StatusIcon = statusInfo.icon;
-                  
+
                   // Map bootstrap classes to tailwind
                   let statusColorClass = '';
                   if (statusInfo.color.includes('success')) statusColorClass = 'bg-green-50 text-green-700 ring-green-600/20';
@@ -683,9 +639,9 @@ const ZohoSubscriptions = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-slate-900">
                           {sub.status === 'cancelled' || sub.status === 'cancelledbycustomer' ? (
-                             <span className="text-red-600">Cancelled: {formatDate(sub.cancelled_at)}</span>
+                            <span className="text-red-600">Cancelled: {formatDate(sub.cancelled_at)}</span>
                           ) : (
-                             <span>{formatDate(sub.current_term_ends_at)}</span>
+                            <span>{formatDate(sub.current_term_ends_at)}</span>
                           )}
                         </div>
                       </td>
@@ -696,23 +652,23 @@ const ZohoSubscriptions = () => {
                             Provision Done
                           </span>
                         ) : (
-                        <button 
-                          className="inline-flex justify-center items-center rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-blue-600 shadow-sm ring-1 ring-inset ring-blue-600/30 hover:bg-blue-50 disabled:opacity-50"
-                          onClick={() => handleProvisionClick(sub.subscription_id)}
-                          disabled={provisioning[sub.subscription_id]}
-                        >
-                          {provisioning[sub.subscription_id] ? (
-                            <>
-                              <Loader2 className="animate-spin mr-1.5 h-3 w-3" />
-                              Provisioning...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="mr-1.5 h-3 w-3" />
-                              Provision
-                            </>
-                          )}
-                        </button>
+                          <button
+                            className="inline-flex justify-center items-center rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-blue-600 shadow-sm ring-1 ring-inset ring-blue-600/30 hover:bg-blue-50 disabled:opacity-50"
+                            onClick={() => handleProvisionClick(sub)}
+                            disabled={provisioning[sub.subscription_id]}
+                          >
+                            {provisioning[sub.subscription_id] ? (
+                              <>
+                                <Loader2 className="animate-spin mr-1.5 h-3 w-3" />
+                                Provisioning...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="mr-1.5 h-3 w-3" />
+                                Provision
+                              </>
+                            )}
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -721,7 +677,7 @@ const ZohoSubscriptions = () => {
               </tbody>
             </table>
           </div>
-          
+
           {/* Pagination */}
           <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-slate-200 sm:px-6">
             <div className="flex-1 flex justify-between sm:hidden">
@@ -777,24 +733,23 @@ const ZohoSubscriptions = () => {
                     // Show limited page numbers if too many
                     if (totalPages > 7) {
                       if (i === 0 || i === totalPages - 1 || (i >= currentPage - 2 && i <= currentPage)) {
-                         // Show
+                        // Show
                       } else if (i === currentPage - 3 || i === currentPage + 1) {
-                         return <span key={i} className="relative inline-flex items-center px-4 py-2 border border-slate-300 bg-white text-sm font-medium text-slate-700">...</span>;
+                        return <span key={i} className="relative inline-flex items-center px-4 py-2 border border-slate-300 bg-white text-sm font-medium text-slate-700">...</span>;
                       } else {
                         return null;
                       }
                     }
-                    
+
                     return (
                       <button
                         key={i}
                         onClick={() => setCurrentPage(i + 1)}
                         aria-current={currentPage === i + 1 ? 'page' : undefined}
-                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                          currentPage === i + 1
+                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === i + 1
                             ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
                             : 'bg-white border-slate-300 text-slate-500 hover:bg-slate-50'
-                        }`}
+                          }`}
                       >
                         {i + 1}
                       </button>
@@ -845,13 +800,13 @@ const ZohoSubscriptions = () => {
                   <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                     <h3 className="text-lg leading-6 font-medium text-slate-900" id="modal-title">Provision Tenant</h3>
                     <div className="mt-4">
-                      <p className="text-sm text-slate-500 mb-2">Select a Technical Manager to assign to this project:</p>
-                      <select 
+                      <p className="text-sm text-slate-500 mb-2">Select a Developer to assign to this project:</p>
+                      <select
                         className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                        value={selectedManagerId} 
+                        value={selectedManagerId}
                         onChange={(e) => setSelectedManagerId(e.target.value)}
                       >
-                        <option value="">-- Select Technical Manager --</option>
+                        <option value="">-- Select Developer --</option>
                         {technicalManagers.map(tm => (
                           <option key={tm.id} value={tm.id}>
                             {tm.email}
@@ -863,15 +818,15 @@ const ZohoSubscriptions = () => {
                 </div>
               </div>
               <div className="bg-slate-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={confirmProvision}
                 >
                   Provision
                 </button>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   onClick={() => setShowProvisionModal(false)}
                 >

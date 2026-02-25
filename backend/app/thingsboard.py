@@ -105,8 +105,31 @@ def get_user_token(sys_token, user_id):
         response = requests.get(url, headers=get_headers(sys_token))
         if response.status_code == 200:
             return response.json()['token']
-    except Exception:
-        pass
+        print(f"Failed to get user token: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Exception getting user token: {e}")
+    return None
+
+def get_user_by_id(token, user_id):
+    url = f"{BASE_URL}/api/user/{user_id}"
+    try:
+        response = requests.get(url, headers=get_headers(token))
+        if response.status_code == 200:
+            return response.json()
+        print(f"Failed to get user {user_id}: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Exception getting user {user_id}: {e}")
+    return None
+
+def get_current_tb_user(token):
+    url = f"{BASE_URL}/api/auth/user"
+    try:
+        response = requests.get(url, headers=get_headers(token))
+        if response.status_code == 200:
+            return response.json()
+        print(f"Failed to get current user: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Exception getting current user: {e}")
     return None
 
 def enrich_users_with_details(token, users):
@@ -153,6 +176,20 @@ def get_tenant_admins(token):
     # But let's try to be specific if possible. 
     # Actually, /api/users returns all users in scope.
     return fetch_all_pages(token, "/api/users", params={"sortProperty": "createdTime", "sortOrder": "DESC"})
+
+def get_first_tenant_admin(token, tenant_id):
+    # Get all users of tenant
+    users = get_tenant_users(token, tenant_id)
+    
+    # Filter for TENANT_ADMIN
+    tenant_admins = [u for u in users if u['authority'] == 'TENANT_ADMIN']
+    
+    # Sort by createdTime (Oldest First)
+    tenant_admins.sort(key=lambda x: x.get('createdTime', float('inf')))
+    
+    if tenant_admins:
+        return tenant_admins[0]
+    return None
 
 
 
@@ -226,11 +263,11 @@ def update_tenant(token, tenant_id, title, profile_id):
         print(f"Error updating tenant: {e}")
     return None
 
-def create_tenant_admin(token, tenant_id, email, first_name, last_name):
-    return create_user(token, email, first_name, last_name, "TENANT_ADMIN", tenant_id=tenant_id)
+def create_tenant_admin(token, tenant_id, email, first_name, last_name, send_activation_mail=True):
+    return create_user(token, email, first_name, last_name, "TENANT_ADMIN", tenant_id=tenant_id, send_activation_mail=send_activation_mail)
 
-def create_user(token, email, first_name, last_name, authority, tenant_id=None, customer_id=None):
-    url = f"{BASE_URL}/api/user?sendActivationMail=true"
+def create_user(token, email, first_name, last_name, authority, tenant_id=None, customer_id=None, send_activation_mail=True):
+    url = f"{BASE_URL}/api/user?sendActivationMail={str(send_activation_mail).lower()}"
     payload = {
         "email": email,
         "authority": authority,
@@ -249,31 +286,33 @@ def create_user(token, email, first_name, last_name, authority, tenant_id=None, 
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"Failed to create user: {response.text}")
+            print(f"Failed to create user: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Exception creating user: {e}")
+    return None
+
+def get_activation_link(token, user_id):
+    url = f"{BASE_URL}/api/user/{user_id}/activationLink"
+    try:
+        response = requests.get(url, headers=get_headers(token))
+        if response.status_code == 200:
+            return response.text
+        else:
+            print(f"Failed to get activation link: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Error fetching activation link: {e}")
     return None
 
 def toggle_user_credentials(token, user_id, enabled):
     headers = get_headers(token)
     cred_url = f"{BASE_URL}/api/user/{user_id}/userCredentialsEnabled?userCredentialsEnabled={str(enabled).lower()}"
     try:
-        requests.post(cred_url, headers=headers)
-        
-        # Update Entity
-        user_url = f"{BASE_URL}/api/user/{user_id}"
-        get_res = requests.get(user_url, headers=headers)
-        if get_res.status_code == 200:
-            user_data = get_res.json()
-            if 'additionalInfo' not in user_data or user_data['additionalInfo'] is None:
-                user_data['additionalInfo'] = {}
-            
-            user_data['additionalInfo']['userActivated'] = enabled
-            user_data['additionalInfo']['userCredentialsEnabled'] = enabled
-            
-            save_url = f"{BASE_URL}/api/user"
-            requests.post(save_url, json=user_data, headers=headers)
-            return True
-    except Exception:
-        pass
-    return False
+        response = requests.post(cred_url, headers=headers)
+        if response.status_code == 200:
+            return {"success": True}
+        else:
+            print(f"Failed to toggle user credentials: {response.status_code} - {response.text}")
+            return {"success": False, "status_code": response.status_code, "detail": response.text}
+    except Exception as e:
+        print(f"Exception toggling user credentials: {e}")
+        return {"success": False, "status_code": 500, "detail": str(e)}
