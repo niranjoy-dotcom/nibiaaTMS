@@ -271,23 +271,34 @@ const UserManagementSection = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{u.email}</td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       <div className="flex flex-wrap gap-2 items-center">
-                        {u.role ? u.role.split(',').map(r => r.trim()).map(role => (
-                          <span key={role} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${(role === 'admin' || role === 'owner') ? 'bg-purple-50 text-purple-700 ring-purple-700/10' :
-                            (role === 'co_admin' || role === 'co_owner') ? 'bg-indigo-50 text-indigo-700 ring-indigo-700/10' :
-                              role === 'project_manager' ? 'bg-blue-50 text-primary ring-blue-700/10' :
-                                role === 'technical_manager' ? 'bg-green-50 text-green-700 ring-green-600/20' :
-                                  'bg-slate-50 text-slate-600 ring-slate-500/10'
-                            }`}>
-                            {{
-                              'owner': 'Owner',
-                              'co_owner': 'Co-owner',
-                              'admin': 'Owner',
-                              'co_admin': 'Co-owner',
-                              'project_manager': 'Marketing',
-                              'technical_manager': 'Developer'
-                            }[role] || role.replace('_', ' ')}
-                          </span>
-                        )) : <span className="text-slate-400 italic text-sm">No Role</span>}
+                        {u.role ? (() => {
+                          const roles = u.role.split(',').map(r => r.trim().toLowerCase()).filter(r => r);
+                          const mapping = {
+                            'owner': 'Owner',
+                            'co_owner': 'Co-owner',
+                            'admin': 'Owner',
+                            'co_admin': 'Co-owner',
+                            'project_manager': 'Marketing',
+                            'technical_manager': 'Developer',
+                            'developer': 'Developer',
+                            'marketing': 'Marketing'
+                          };
+                          const labels = [...new Set(roles.map(r => mapping[r] || r.replace('_', ' ')))];
+                          return labels.map((label, idx) => {
+                            // Find original role for color coding (best effort)
+                            const primaryRole = roles.find(r => (mapping[r] || r.replace('_', ' ')) === label);
+                            return (
+                              <span key={idx} className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ring-1 ring-inset ${(primaryRole === 'admin' || primaryRole === 'owner') ? 'bg-purple-50 text-purple-700 ring-purple-700/10' :
+                                (primaryRole === 'co_admin' || primaryRole === 'co_owner') ? 'bg-indigo-50 text-indigo-700 ring-indigo-700/10' :
+                                  primaryRole === 'project_manager' || primaryRole === 'marketing' ? 'bg-blue-50 text-primary ring-blue-700/10' :
+                                    primaryRole === 'technical_manager' || primaryRole === 'developer' ? 'bg-green-50 text-green-700 ring-green-600/20' :
+                                      'bg-slate-50 text-slate-600 ring-slate-500/10'
+                                }`}>
+                                {label}
+                              </span>
+                            );
+                          });
+                        })() : <span className="text-slate-400 italic text-sm">No Role</span>}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">

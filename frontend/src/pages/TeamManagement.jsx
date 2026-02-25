@@ -377,7 +377,7 @@ const TeamManagement = () => {
                                                             </div>
                                                             <div>
                                                                 <div className="text-sm font-medium text-slate-900">{users.find(u => u.id === member.user_id)?.email || `User #${member.user_id}`}</div>
-                                                                <div className="text-xs text-slate-500">Marketing</div>
+                                                                <div className="text-xs text-slate-500">{formatRoleName('marketing')}</div>
                                                             </div>
                                                         </div>
                                                         <button onClick={() => handleRemoveMember(team.id, member.user_id)} className="text-slate-400 hover:text-red-500">
@@ -402,7 +402,7 @@ const TeamManagement = () => {
                                                             </div>
                                                             <div>
                                                                 <div className="text-sm font-medium text-slate-900">{users.find(u => u.id === member.user_id)?.email || `User #${member.user_id}`}</div>
-                                                                <div className="text-xs text-slate-500">Developer</div>
+                                                                <div className="text-xs text-slate-500">{formatRoleName('developer')}</div>
                                                             </div>
                                                         </div>
                                                         <button onClick={() => handleRemoveMember(team.id, member.user_id)} className="text-slate-400 hover:text-red-500">
@@ -427,7 +427,7 @@ const TeamManagement = () => {
                                                             </div>
                                                             <div>
                                                                 <div className="text-sm font-medium text-slate-900">{users.find(u => u.id === member.user_id)?.email || `User #${member.user_id}`}</div>
-                                                                <div className="text-xs text-slate-500">Team Lead</div>
+                                                                <div className="text-xs text-slate-500">{formatRoleName(member.role)}</div>
                                                             </div>
                                                         </div>
                                                         <button onClick={() => handleRemoveMember(team.id, member.user_id)} className="text-slate-400 hover:text-red-500">
@@ -456,7 +456,7 @@ const TeamManagement = () => {
                                                                 </div>
                                                                 <div>
                                                                     <div className="text-sm font-medium text-slate-900">{userDetails?.email || `User #${member.user_id}`}</div>
-                                                                    <div className="text-xs text-slate-500">{member.role}</div>
+                                                                    <div className="text-xs text-slate-500">{formatRoleName(member.role)}</div>
                                                                 </div>
                                                             </div>
                                                             <button onClick={() => handleRemoveMember(team.id, member.user_id)} className="text-slate-400 hover:text-red-500">
@@ -490,15 +490,19 @@ const TeamManagement = () => {
 
                                         // Function to format role name for display
                                         const formatRoleName = (r) => {
+                                            if (!r) return '';
                                             const roleMap = {
                                                 'admin': 'Owner',
                                                 'co_admin': 'Co-owner',
                                                 'project_manager': 'Marketing',
                                                 'technical_manager': 'Developer',
-                                                'owner': 'Owner', // Fallback for legacy
-                                                'co_owner': 'Co-owner'
+                                                'owner': 'Owner',
+                                                'co_owner': 'Co-owner',
+                                                'developer': 'Developer',
+                                                'marketing': 'Marketing'
                                             };
-                                            return roleMap[r.trim()] || r.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                                            const role = r.trim().toLowerCase();
+                                            return roleMap[role] || role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                                         };
 
 

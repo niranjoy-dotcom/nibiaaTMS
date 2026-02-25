@@ -263,21 +263,26 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
-                        {u.role ? u.role.split(',').map((r, idx) => {
-                          const roleLabel = {
+                        {u.role ? (() => {
+                          const roles = u.role.split(',').map(r => r.trim().toLowerCase()).filter(r => r);
+                          const mapping = {
                             'admin': 'Owner',
                             'owner': 'Owner',
                             'co_admin': 'Co-owner',
                             'co_owner': 'Co-owner',
                             'project_manager': 'Marketing',
-                            'technical_manager': 'Developer'
-                          }[r.trim()] || r.trim();
-                          return (
+                            'technical_manager': 'Developer',
+                            'developer': 'Developer',
+                            'marketing': 'Marketing'
+                          };
+                          // Dedup labels
+                          const labels = [...new Set(roles.map(r => mapping[r] || r.charAt(0).toUpperCase() + r.slice(1)))];
+                          return labels.map((label, idx) => (
                             <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              {roleLabel}
+                              {label}
                             </span>
-                          );
-                        }) : (
+                          ));
+                        })() : (
                           <span className="text-slate-400 italic text-xs">No Roles</span>
                         )}
                       </div>
