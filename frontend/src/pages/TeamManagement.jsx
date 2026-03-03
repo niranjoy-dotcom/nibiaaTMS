@@ -161,6 +161,22 @@ const TeamManagement = () => {
         });
     };
 
+    const formatRoleName = (r) => {
+        if (!r) return '';
+        const roleMap = {
+            'admin': 'Owner',
+            'co_admin': 'Co-owner',
+            'project_manager': 'Marketing',
+            'technical_manager': 'Developer',
+            'owner': 'Owner',
+            'co_owner': 'Co-owner',
+            'developer': 'Developer',
+            'marketing': 'Marketing'
+        };
+        const role = r.trim().toLowerCase();
+        return roleMap[role] || role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    };
+
     return (
         <div className="max-w-7xl mx-auto">
             <div className="md:flex md:items-center md:justify-between mb-6">
@@ -488,22 +504,7 @@ const TeamManagement = () => {
                                             // Let's purely follow restrictions + generic Member if not restricted.
                                         }
 
-                                        // Function to format role name for display
-                                        const formatRoleName = (r) => {
-                                            if (!r) return '';
-                                            const roleMap = {
-                                                'admin': 'Owner',
-                                                'co_admin': 'Co-owner',
-                                                'project_manager': 'Marketing',
-                                                'technical_manager': 'Developer',
-                                                'owner': 'Owner',
-                                                'co_owner': 'Co-owner',
-                                                'developer': 'Developer',
-                                                'marketing': 'Marketing'
-                                            };
-                                            const role = r.trim().toLowerCase();
-                                            return roleMap[role] || role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                                        };
+                                        // Roles logic section
 
 
                                         return (
